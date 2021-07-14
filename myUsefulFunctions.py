@@ -11,7 +11,21 @@ import os
 import sys
 
 import sys
- 
+
+
+def mergepdf(fins, fout):
+    """
+    Merge given PDF files in fins and save the combined file in fout.
+    """
+    from PyPDF2 import PdfFileMerger, PdfFileReader
+    # Call the PdfFileMerger
+    mergedObject = PdfFileMerger()
+    for fin in fins: mergedObject.append(PdfFileReader(fin, 'rb'))
+    # Write all the files into a file which is named as shown below
+    mergedObject.write(fout)
+    return
+
+
 def pminf(array):
     x = 1
     pmin_list = []
@@ -210,25 +224,37 @@ def intersect(*lists):
 
 def readfasta(f):
     from gzip import open as gzopen
+    from gzip import BadGzipFile
     from collections import deque
+    import sys
     out = {}
     chrid = ''
     chrseq = deque()
-    try:
-        with gzopen(f, 'rb') as fin:
-            for line in fin:
-                break
-                if b'>' in line:
-                    if chrid != '':
-                        out[chrid] = ''.join(chrseq)
-                        chrid = line.strip().split(b'>')[1].split(b' ')[0].decode()
-                        chrseq = deque()
-                    else:
-                        chrid = line.strip().split(b'>')[1].split(b' ')[0].decode()
-                else:
-                    chrseq.append(line.strip().decode())
-    except OSError:
+
+    # Test if the file is Gzipped or not
+    with gzopen(f, 'rb') as fin:
         try:
+            fin.read(1)
+            isgzip = True
+        except BadGzipFile:
+            isgzip = False
+
+    try:
+        if isgzip:
+            with gzopen(f, 'rb') as fin:
+                for line in fin:
+                    if b'>' in line:
+                        if chrid != '':
+                            out[chrid] = ''.join(chrseq)
+                            chrid = line.strip().split(b'>')[1].split(b' ')[0].decode()
+                            chrseq = deque()
+                        else:
+                            chrid = line.strip().split(b'>')[1].split(b' ')[0].decode()
+                        if chrid in out.keys():
+                            sys.exit(" Duplicate chromosome IDs are not accepted. Chromosome ID {} is duplicated. Provided chromosome with unique IDs".format(chrid))
+                    else:
+                        chrseq.append(line.strip().decode())
+        else:
             with open(f, 'r') as fin:
                 for line in fin:
                     if '>' in line:
@@ -238,10 +264,10 @@ def readfasta(f):
                             chrseq = deque()
                         else:
                             chrid = line.strip().split('>')[1].split(' ')[0]
+                        if chrid in out.keys():
+                            sys.exit(" Duplicate chromosome IDs are not accepted. Chromosome ID {} is duplicated. Provided chromosome with unique IDs".format(chrid))
                     else:
                         chrseq.append(line.strip())
-        except Exception as e:
-            raise Exception(e)
     except Exception as e:
         raise Exception(e)
 
@@ -306,8 +332,8 @@ def extractSeq(args):
 
 def revcomp(seq):
     assert type(seq) == str
-    old = 'ACGTacgt'
-    rev = 'TGCAtgca'
+    old = 'ACGTRYKMBDHVacgtrykmbdhv'
+    rev = 'TGCAYRMKVHDBtgcayrmkvhdb'
     tab = str.maketrans(old, rev)
     return seq.translate(tab)[::-1]
 
@@ -675,9 +701,10 @@ def plthist(args):
         pltdata = data
        
     sort_k = sorted(list(pltdata.keys()))
-
+    from matplotlib import use as mpuse
+    mpuse('agg')
     from matplotlib import pyplot as plt
-    fig = plt.figure(figsize = [args.W, args.H])
+    fig = plt.figure(figsize=[args.W, args.H])
     ax = fig.add_subplot()
     if num:
         ax.bar(sort_k, [int(pltdata[k]) for k in sort_k], width=n)
@@ -689,6 +716,10 @@ def plthist(args):
     if args.xlog: ax.set_xscale('log')
     if args.ylog: ax.set_yscale('log')
     if args.xlim is not None: ax.set_xlim([args.xlim[0], args.xlim[1]])
+    ax.minorticks_on()
+    ax.xaxis.grid(True, which='both', linestyle='--')
+    ax.yaxis.grid(True, which='both', linestyle='--')
+    ax.set_axisbelow(True)
     plt.tight_layout()
     plt.savefig(args.o.name)
     fin.close()
@@ -797,6 +828,141 @@ def getcol(args):
                 fout.write(args.s.join([line[i] for i in select]) + '\n')
 
 
+def bamcov(args):
+    import sys
+    import os
+    from subprocess import Popen, PIPE
+    import warnings
+
+
+    formatwarning_orig = warnings.formatwarning
+    warnings.formatwarning = lambda message, category, filename, lineno, line=None:    formatwarning_orig(message, category, filename, lineno, line='')
+
+    BAM = args.bam.name
+    OUT = args.out.name
+    BED = args.r.name if args.r is not None else None
+    if BED is not None:
+        sys.exit("SELECTING REGIONS (-R) HAS NOT BEEN IMPLEMENTED YET. PLEASE DO NOT USE IT.")
+    D = args.d
+    # print(BAM, OUT, D)
+    # sys.exit()
+    print(BAM)
+    if not os.path.isfile(BAM):
+        sys.exit('BAM file is not found: {}'.format(BAM))
+
+    # if not os.path.isfile(BED):
+    #     sys.exit('BED file is not found: '.format(BED))
+
+    # Get chromosome names and lengths
+    p = Popen("samtools view -H {}".format(BAM).split(), stdout=PIPE, stderr=PIPE)
+    o = p.communicate()
+    if o[1] != b'':
+        sys.exit("Error in using samtools view to get BAM file header:\n{}".format(o[1].decode()))
+
+    h = o[0].decode().strip().split("\n")
+    chrlen = {}
+    for line in h:
+        line = line.strip().split()
+        if line[0] != '@SQ': continue
+        if not any(['SN' in x for x in line]):
+            sys.exit('SN tag not present in header: {}'.format(' '.join(line)))
+        if not any(['LN' in x for x in line]):
+            sys.exit('LN tag not present in header: {}'.format(' '.join(line)))
+        c = [x for x in line if 'SN' == x[:2]][0].split(':')[1]
+        l = [x for x in line if 'LN' == x[:2]][0].split(':')[1]
+        chrlen[c] = int(l)
+
+
+    # Get read-depths
+    tname = "TMP_" + os.path.basename(BAM) + ".txt"
+    warnings.warn("Creating {} for saving the samtools depth output. Ensure enough storage space is available.".format(tname), stacklevel=-1)
+    with open(tname, 'w') as TMP:
+        p = Popen("{} {}".format(D, BAM).split(), stdout=TMP, stderr=PIPE)
+        o = p.communicate()
+        if o[1] != b'':
+            sys.exit("Error in using samtools depth:\n{}".format(o[1].decode()))
+
+    chrrd = {c:0 for c in chrlen.keys()}
+
+    with open(tname, 'r') as fin:
+        for line in fin:
+            line = line.strip().split()
+            try:
+                chrrd[line[0]] += int(line[2])
+            except KeyError as e:
+                sys.exit("Chromosome {} in samtools_depth_output not present in SAM file header. Ensure that all chromosomes and their lengths are present SAM file header.")
+
+    with open(OUT, 'w') as fout:
+        for k, v in chrrd.items():
+            fout.write("{}\t{}\n".format(k, v/chrlen[k]))
+
+    os.remove(tname)
+    # TODO: Add method to filter for BED regions
+
+
+def run_bam_readcount(tmp_com, outfile):
+    from subprocess import Popen, PIPE
+    with open(outfile, 'w') as TMP:
+        p = Popen(tmp_com.split(), stdout=TMP, stderr=PIPE)
+    o = p.communicate()
+    # if o[1] != b'Minimum mapping quality is set to 40':
+    #     sys.exit("Error in running bam-readcount:\n{}".format(o[1].decode()))
+
+
+def pbamrc(args):
+    # print(args)
+    if args.bam is None or args.l is None or args.f is None:
+        sys.exit("Require bam, position bed, and refernce fasta files are missing")
+
+    if args.n < 1: sys.exit("Invalid number of cores")
+    N = args.n
+
+    from subprocess import Popen, PIPE
+    from multiprocessing import Pool
+    import pandas as pd
+    import numpy as np
+    from time import time
+    import os
+    bed = pd.read_table(args.l.name, header=None)
+    splits = np.array_split(range(bed.shape[0]), N)
+    tmp_df = [bed.iloc[i] for i in splits]
+    pre = int(time())
+    for i in range(N):
+        tmp_df[i].to_csv(str(pre)+'_'+str(i)+".bed", sep='\t', header=False, index=False)
+
+    command = "bam-readcount"
+    if args.q > 0: command += " -q {}".format(args.q)
+    if args.b > 0: command += " -b {}".format(args.b)
+    if args.d != 10000000: command += " -d {}".format(args.d)
+    if args.f is not None: command += " -f {}".format(args.f.name)
+    if args.D == 1: command += " -D {}".format(args.D)
+    if args.p : command += " -p"
+    if args.w != -1 : command += " -w {}".format(args.w)
+    if args.i : command += " -i"
+
+    commands = deque()
+    for i in range(N):
+        tname = str(pre)+'_'+str(i)+".rc"
+        tmp_com = command + ' -l ' + str(pre)+'_'+str(i)+".bed" + ' ' + args.bam.name
+        commands.append([tmp_com, tname])
+
+    with Pool(processes=N) as pool:
+        pool.starmap(run_bam_readcount, commands)
+
+    with open(args.o.name, 'w') as fout:
+        for i in range(N):
+            with open(str(pre)+'_'+str(i)+".rc", 'r') as fin:
+                for line in fin:
+                    line = line.strip().split()
+                    outstr = deque(line[:4])
+                    for i in range(5,10):
+                        outstr.append(line[i].split(":")[1])
+                    fout.write("\t".join(outstr) + "\n")
+
+    for i in range(N):
+        os.remove(str(pre)+'_'+str(i)+".bed")
+        os.remove(str(pre)+'_'+str(i)+".rc")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -816,15 +982,43 @@ if __name__ == '__main__':
     parser_vcfdp = subparsers.add_parser("vcfdp", help="Get DP and DP4 values from a VCF file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_gffsort = subparsers.add_parser("gffsort", help="Sort a GFF file based on the gene start positions", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_getcol = subparsers.add_parser("getcol", help="Select columns from a TSV or CSV file using column names", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_bamcov = subparsers.add_parser("bamcov", help="Get mean read-depth for chromosomes from a BAM file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_pbamrc = subparsers.add_parser("pbamrc", help="Run bam-readcount in a parallel manner by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
 
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
 
 
+    parser_pbamrc.set_defaults(func=pbamrc)
+    parser_pbamrc.add_argument("bam", help="Input BAM file. Must have the SQ/SN/ tags for chromosome name and length", type=argparse.FileType('r'))
+    parser_pbamrc.add_argument("-q", help="minimum mapping quality of reads used for counting.", type=int, default=0)
+    parser_pbamrc.add_argument("-b", help="minimum base quality at a position to use the read for counting.", type=int, default=0)
+    parser_pbamrc.add_argument("-d", help="max depth to avoid excessive memory usage.", type=int, default=10000000)
+    parser_pbamrc.add_argument("-l", help="file containing a list of regions to report readcounts within.", type=argparse.FileType('r'), required=True)
+    parser_pbamrc.add_argument("-f", help="reference sequence in the fasta format.", type=argparse.FileType('r'), required=True)
+    parser_pbamrc.add_argument("-D", help="report the mapping qualities as a comma separated list.", default=0, type=int, choices=[0, 1])
+    parser_pbamrc.add_argument("-p", help="report results by library.", default=False, action='store_true')
+    parser_pbamrc.add_argument("-w", help="maximum number of warnings of each type to emit. -1 gives an unlimited number.", type=int, default=-1)
+    parser_pbamrc.add_argument("-i", help="generate indel centric readcounts. Reads containing insertions will not be included in per-base counts", default=False, action='store_true')
+    parser_pbamrc.add_argument("-n", help="Number of CPU cores to use", type=int, default=1)
+    parser_pbamrc.add_argument("o", help="Output file name", type=argparse.FileType('w'))
+
+
+
+
+
+    parser_bamcov.set_defaults(func=bamcov)
+    parser_bamcov.add_argument("bam", help="Input BAM file. Must have the SQ/SN/ tags for chromosome name and length", type=argparse.FileType('r'))
+    parser_bamcov.add_argument("out", help="Output file name", type=argparse.FileType('w'))
+    parser_bamcov.add_argument("-r", help="BED file containing genomic regions to use", type=argparse.FileType('r'))
+    parser_bamcov.add_argument("-d", help="Samtools depth command to use. Provide within double inverted quotes (\") ", type=str, default="samtools depth -d 0")
+
+
     parser_getcol.set_defaults(func=getcol)
-    parser_getcol.add_argument("file", help="Input file File", type=argparse.FileType('r'))
-    parser_getcol.add_argument("out", help="Output file File", type=argparse.FileType('w'))
+    parser_getcol.add_argument("file", help="Input file", type=argparse.FileType('r'))
+    parser_getcol.add_argument("out", help="Output file", type=argparse.FileType('w'))
     parser_getcol.add_argument("-s", help="Column separating char if not separated by tab/spaces", type=str)
     parser_getcol.add_argument("-m", help="Select column matching this string. Multiple space separated values can be provided", type=str, nargs='+')
     parser_getcol.add_argument("-c", help="Select column containing this string. Multiple space separated values can be provided", type=str, nargs='+')
