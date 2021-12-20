@@ -10,8 +10,30 @@ import argparse
 import os
 import sys
 
-import sys
+def cgtpl(cg):
+    """
+    Takes a cigar string as input and returns a cigar tuple
+    """
+    for i in "MIDNSHPX=":
+        cg = cg.replace(i, ';'+i+',')
+    return [i.split(';') for i in cg.split(',')[:-1]]
+#end
 
+def cggenlen(cg, gen):
+    """
+    Takes cigar as input, and return the number of bases covered by it the reference
+    or query genome.
+    Cigar strings are first converted to cigar tuples.
+    """
+    if type(cg) == str:
+        cg = cgtpl(cg)
+    if gen not in ['r', 'q']:
+        raise ValueError('gen need to "r" or "q" for reference or query')
+        return
+    s = set(['M', 'D', 'N', '=', 'X']) if gen == 'r' else set(['M', 'I', 'S', '=', 'X'])
+    l = sum([int(i[0]) for i in cg if i[1] in s])
+    return l
+#end
 
 def mergepdf(fins, fout):
     """
@@ -24,7 +46,7 @@ def mergepdf(fins, fout):
     # Write all the files into a file which is named as shown below
     mergedObject.write(fout)
     return
-
+#end function
 
 def pminf(array):
     x = 1
@@ -177,7 +199,7 @@ def p_adjust(*args):
         print("method {} isn't defined.".format(method))
         sys.exit()
     return qvalues
- 
+#end
  
 def unlist(nestedList):
     import numpy as np
@@ -200,26 +222,34 @@ def getColors(colorPalette, numOfCol):
 	return([colorPalette(i/numOfCol) for i in range(numOfCol)])
 
 
-def plotDensity(data):
+def plotdensity(data):
     import numpy as np
     import matplotlib.pyplot as plt
     from scipy.stats import gaussian_kde
     density = gaussian_kde(data)
-    xs = np.linspace(min(data), max(data),1000)
-    density.covariance_factor = lambda : .2
+    xs = np.linspace(min(data), max(data), 1000)
+    density.covariance_factor = lambda: .2
     density._compute_covariance()
-    plt.plot(xs,density(xs))
+    plt.plot(xs, density(xs))
     plt.show()
+#end
 
-
-def subList(lst1, lst2):
+def sublist(lst1, lst2):
     import operator as op
     return(list(map(op.sub,lst1, lst2)))
-
+#end
 
 def intersect(*lists):
     import numpy as np
     return reduce(np.intersect1d,list(lists))
+
+
+def readblast(f):
+    """
+    Read tabular format blast output
+    """
+    import pandas as pd
+    return pd.read_table(f, comment="#")
 
 
 def readfasta(f):
@@ -291,44 +321,90 @@ def writefasta(fa, f):
                 fo.write(v[i:(i+60)]+'\n')
 
 
+# def extractSeq(args):
+#     # TODO: Fix this function to work with new parameter style
+#     # TODO: Use in-built fasta parser/writer and remove dependency on Bio.SeqIO
+#     import pandas as pd
+#     from Bio.SeqRecord import SeqRecord
+#     from Bio.SeqIO import parse, write
+#     filePath = args.fasta.name
+#     if args.fin == None:
+#        seqID = args.loc[0]
+#        querySeq = [fasta for fasta in parse(filePath, 'fasta') if fasta.id == seqID][0]
+#
+#        start = int(args.s) if args.s is not None else 0
+#        end = int(args.e) if args.e is not None else 0
+#        end = end if end <= len(querySeq.seq) else len(querySeq.seq)
+#
+#        querySeq.seq = querySeq.seq[int(start):(int(end)+1)]
+#        if args.o != None:
+#            write(querySeq, args.o, "fasta")
+#        else:
+#            print("> "+querySeq.id)
+#            print(querySeq.seq)
+#     else:
+#         fin = pd.read_table(args.fin.name, header=None, delim_whitespace=True)
+#         fin.columns = ["chr", "start", "end"]
+#         fin[['start', 'end']] = fin[['start', 'end']].astype('int')
+#         fin.loc[fin['start'] < 0, 'start'] = 0
+#         fin.sort_values(["chr", "start", "end"], inplace=True)
+#         outF = deque()
+#         for fasta in parse(filePath, 'fasta'):
+#             if fasta.id in fin.chr.values:
+#                 chrData = fin.loc[fin.chr == fasta.id].copy()
+#                 chrData.loc[chrData['end'] > len(fasta.seq), 'end'] = len(fasta.seq)
+#                 for row in chrData.itertuples(index=False):
+#                     outF.append(SeqRecord(seq=fasta.seq[row.start:row.end], id="_".join(map(str, row)), description=""))
+#         if args.o != None:
+#             write(outF, args.o.name, "fasta")
+#         else:
+#            for i in outF:
+#                 print("> "+i.id)
+#                 print(i.seq)
+#END
+
 def extractSeq(args):
+    # TODO: Fix this function to work with new parameter style
     import pandas as pd
-    from Bio.SeqRecord import SeqRecord
-    from Bio.SeqIO import parse, write
-    filePath = args.fasta.name
-    if args.fin == None:
-       seqID = args.loc[0]
-       querySeq = [fasta for fasta in parse(filePath, 'fasta') if fasta.id == seqID][0]
-
-       start = int(args.loc[1]) if int(args.loc[1]) >= 0 else 0
-       end = int(args.loc[2]) if int(args.loc[2]) <= len(querySeq.seq) else len(querySeq.seq)
-
-       querySeq.seq = querySeq.seq[int(start):(int(end)+1)]
-       if args.o != None:
-           write(querySeq, args.o, "fasta")
-       else:
-           print("> "+querySeq.id)
-           print(querySeq.seq)
+    import warnings
+    if args.fin.name is not None:
+        if args.chr is not None or args.s is not None or args.e is not None:
+            warnings.warn("Using --fin. Ignoring --chr, -s, -e")
+    f = args.fasta.name
+    if args.fin is None:
+        seqid = args.chr
+        q = {c: s for c, s in readfasta(f).items() if c == seqid}
+        if len(q) > 1:
+            sys.exit("Found multiple chromosomes with same ID. Exiting.")
+        start = int(args.s) if args.s is not None else 0
+        end = int(args.e) if args.e is not None else len(q[seqid])
+        end = end if end <= len(q[seqid]) else len(q[seqid])
+        # Output the selected sequence
+        if args.o is not None:
+            writefasta({seqid: q[seqid][start:(end+1)]}, args.o)
+        else:
+            print("> {}\n{}".format(seqid, q[seqid][start:(end+1)]))
     else:
-        fin = pd.read_table(args.fin.name, header=None, delim_whitespace=True)
+        fin = pd.read_table(args.fin.name, header=None, delim_whitespace=True)[[0, 1, 2]]
         fin.columns = ["chr", "start", "end"]
         fin[['start', 'end']] = fin[['start', 'end']].astype('int')
         fin.loc[fin['start'] < 0, 'start'] = 0
         fin.sort_values(["chr", "start", "end"], inplace=True)
-        outF = deque()
-        for fasta in parse(filePath, 'fasta'):
-            if fasta.id in fin.chr.values:
-                chrData = fin.loc[fin.chr == fasta.id].copy()
-                chrData.loc[chrData['end'] > len(fasta.seq), 'end'] = len(fasta.seq)
-                for row in chrData.itertuples(index=False):
-                    outF.append(SeqRecord(seq=fasta.seq[row.start:row.end], id="_".join(map(str, row)), description=""))
-        if args.o != None:
-            write(outF, args.o.name, "fasta")
+        out = dict()
+        chroms = set(fin.chr.values)
+        for c, s in readfasta(f).items():
+            if c in chroms:
+                cdf = fin.loc[fin.chr == fasta.id].copy()
+                cdf.loc[cdf['end'] > len(fasta.seq), 'end'] = len(fasta.seq)
+                for row in cdf.itertuples(index=False):
+                    out['{}_{}_{}'.format(c, row[2], row[2])] = s[row.start:(row.end+1)]
+        # Output the selected sequence
+        if args.o is not None:
+            writefasta(out, args.o.name)
         else:
-           for i in outF:
-                print("> "+i.id)
-                print(i.seq)
-                
+            for c, s in out.items():
+                print("> {}\n{}".format(c, s))
+# END
 
 def revcomp(seq):
     assert type(seq) == str
@@ -667,7 +743,6 @@ def plthist(args):
         except ValueError:
             raise ValueError('First column contains non numerical values')
             sys.exit()
-
   # Check if keys are numeric
     num = True
     for k in data.keys():
@@ -676,7 +751,7 @@ def plthist(args):
         except ValueError:
             num = False
             break
-  
+    # print(num)
     if num:
         if args.xlim is not None:
             MIN, MAX = args.xlim[0], args.xlim[1]
@@ -699,8 +774,9 @@ def plthist(args):
         pltdata = {(k[0]+k[1])/2 : v for k, v in pltdata2.items()}
     else:
         pltdata = data
-       
+
     sort_k = sorted(list(pltdata.keys()))
+    # print(pltdata)
     from matplotlib import use as mpuse
     mpuse('agg')
     from matplotlib import pyplot as plt
@@ -716,6 +792,7 @@ def plthist(args):
     if args.xlog: ax.set_xscale('log')
     if args.ylog: ax.set_yscale('log')
     if args.xlim is not None: ax.set_xlim([args.xlim[0], args.xlim[1]])
+    if args.ylim is not None: ax.set_ylim([args.ylim[0], args.ylim[1]])
     ax.minorticks_on()
     ax.xaxis.grid(True, which='both', linestyle='--')
     ax.yaxis.grid(True, which='both', linestyle='--')
@@ -926,7 +1003,7 @@ def pbamrc(args):
     bed = pd.read_table(args.l.name, header=None)
     splits = np.array_split(range(bed.shape[0]), N)
     tmp_df = [bed.iloc[i] for i in splits]
-    pre = int(time())
+    pre = str(time()).replace(".", "")
     for i in range(N):
         tmp_df[i].to_csv(str(pre)+'_'+str(i)+".bed", sep='\t', header=False, index=False)
 
@@ -964,6 +1041,99 @@ def pbamrc(args):
         os.remove(str(pre)+'_'+str(i)+".rc")
 
 
+def run_ppileup(locs, out, bam, pars):
+    from subprocess import Popen, PIPE
+    with open(out, 'w') as fout:
+        for loc in locs:
+            # print("/srv/netscratch/dep_mercier/grp_schneeberger/bin/bin_manish/samtools mpileup {pars} -r {c}:{s}-{e} {bam}".format(pars=pars, c=loc[0], s=int(loc[1])+1, e=loc[2], bam=bam))
+            p = Popen("/srv/netscratch/dep_mercier/grp_schneeberger/bin/bin_manish/samtools mpileup {pars} -r {c}:{s}-{e} {bam}".format(pars=pars, c=loc[0], s=int(loc[1])+1, e=loc[2], bam=bam).split(), stdout=fout, stderr=PIPE)
+            o = p.communicate()
+
+
+def ppileup(args):
+    # print(args)
+    NC = args.n
+    BED = args.bed.name
+    BAM = args.bam.name
+    OUT = args.out.name
+    PARAM = args.params if len(args.params) > 0 else ''
+
+    from collections import deque
+    import numpy as np
+    from multiprocessing import Pool
+    from functools import partial
+    from time import time
+    from subprocess import Popen, PIPE
+    import os
+
+    bedpos = deque()
+    with open(BED, 'r') as fin:
+        for line in fin:
+            line = line.strip().split()
+            bedpos.append(line)
+    splits = np.array_split(range(len(bedpos)), NC)
+    # print(splits)
+    bedsplit = [[bedpos[i] for i in split] for split in splits]
+    # [print(bedsplit[i]) for i in range(NC)]
+    pre = int(time())
+    outs = [str(pre) + str(i) + '.tmp' for i in range(NC)]
+    # outs = ['TMP'+ str(i) + '.tmp' for i in range(NC)]
+    with Pool(processes=NC) as pool:
+        pool.starmap(partial(run_ppileup, bam=BAM, pars=PARAM), zip(bedsplit, outs))
+    with open(OUT, 'w') as fout:
+        p = Popen("cat {outs} {OUT}".format(outs=' '.join(outs), OUT=OUT).split(), stdout=fout, stderr=PIPE)
+    p.communicate()
+    # [os.remove(o) for o in outs]
+#END
+
+def splitbam(args):
+    BAM = args.bam.name
+    TAG = args.tag
+    perr = True
+    try: import pysam
+    except ModuleNotFoundError: print("Pysam not found. Exiting.")
+    from collections import deque
+    import sys
+    rt = 'r' + args.f
+    wt = 'w' + args.o
+    if args.o == 'b': wex='.bam'
+    elif args.o == 's': wex='.sam'
+    elif args.o == 'c': wex='.cram'
+    else:
+        raise ValueError("Incorrect output file type: {}".format(args.o))
+        sys.exit()
+    b = pysam.AlignmentFile(BAM, rt)
+    head = b.header
+    # b = pysam.AlignmentFile('/srv/netscratch/dep_mercier/grp_schneeberger/projects/SynSearch/tests/tmp2.bam', rt)
+    bc = ''
+    bcreads = deque()
+    for read in b:
+        try:
+            rbc = read.get_tag(TAG)
+        except KeyError:
+            if perr:
+                print(TAG + " not found in {qname} at position {rname}:{rpos}. All reads without tag would be skipped.".format(qname=read.qname,rname= read.reference_name, rpos=read.reference_start))
+                perr = False
+            continue
+        if rbc == bc: bcreads.append(read)
+        elif bc == '':
+                bc = rbc
+                bcreads.append(read)
+        else:
+            if len(bcreads) > args.m:
+                with pysam.AlignmentFile(bc+wex, wt, header=head) as f:
+                    for r in bcreads:
+                        f.write(r)
+            bc = rbc
+            bcreads = deque()
+            bcreads.append(read)
+    if len(bcreads) > args.m:
+        with pysam.AlignmentFile(bc+wex, wt, header=b.head) as f:
+            for r in bcreads:
+                f.write(r)
+#END
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     subparsers = parser.add_subparsers()
@@ -984,11 +1154,30 @@ if __name__ == '__main__':
     parser_getcol = subparsers.add_parser("getcol", help="Select columns from a TSV or CSV file using column names", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_bamcov = subparsers.add_parser("bamcov", help="Get mean read-depth for chromosomes from a BAM file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_pbamrc = subparsers.add_parser("pbamrc", help="Run bam-readcount in a parallel manner by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # parser_parallel = subparsers.add_parser("parallel", help="Run bam-readcount in a parallel manner by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_ppileup = subparsers.add_parser("ppileup", help="Currently it is slower than just running mpileup on 1 CPU. Might be possible to optimize later. Run samtools mpileup in parallel when pileup is required for specific positions by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_splitbam = subparsers.add_parser("splitbam", help="Split a BAM files based on TAG value. BAM file must be sorted using the TAG.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
+
+    ## Split BAM
+    parser_splitbam.set_defaults(func=splitbam)
+    parser_splitbam.add_argument("bam", help="BAM file", type=argparse.FileType('r'))
+    parser_splitbam.add_argument("tag", help="tag to be used for splitting the BAM file", type=str)
+    parser_splitbam.add_argument("-f", help="Alignments format BAM(b)/SAM(s)/CRAM(c) format", type=str, choices=['b', 's', 'c'], default='b')
+    parser_splitbam.add_argument("-o", help="Output alignment format BAM(b)/SAM(s)/CRAM(c) format", type=str, choices=['b','s','c'], default='b')
+    parser_splitbam.add_argument("-m", help="Minimum number of reads required for a barcode", type=int, default=100)
+
+
+    parser_ppileup.set_defaults(func=ppileup)
+    parser_ppileup.add_argument("n", help="Number of CPU cores to use", type=int, default=1)
+    parser_ppileup.add_argument("bed", help="Input bed file with regions to get pileup for", type=argparse.FileType('r'))
+    parser_ppileup.add_argument("bam", help="Input bam file", type=argparse.FileType('r'))
+    parser_ppileup.add_argument("out", help="Output file name", type=argparse.FileType('w'))
+    parser_ppileup.add_argument("params", help="samtools mpileup parameters. Write within quotes", type=str)
 
 
     parser_pbamrc.set_defaults(func=pbamrc)
@@ -1004,9 +1193,6 @@ if __name__ == '__main__':
     parser_pbamrc.add_argument("-i", help="generate indel centric readcounts. Reads containing insertions will not be included in per-base counts", default=False, action='store_true')
     parser_pbamrc.add_argument("-n", help="Number of CPU cores to use", type=int, default=1)
     parser_pbamrc.add_argument("o", help="Output file name", type=argparse.FileType('w'))
-
-
-
 
 
     parser_bamcov.set_defaults(func=bamcov)
@@ -1051,6 +1237,7 @@ if __name__ == '__main__':
     parser_plthist.add_argument("-xlog", help="X-axis on log scale", default=False, action='store_true')
     parser_plthist.add_argument("-ylog", help="Y-axis on log scale", default=False, action='store_true')
     parser_plthist.add_argument("-xlim", help="Set X-axis limit for numerical data", nargs=2, type=int)
+    parser_plthist.add_argument("-ylim", help="Set Y-axis limit for numerical data", nargs=2, type=int)
     parser_plthist.add_argument("-t", help="title of the plot", type=str, default=None)
     parser_plthist.add_argument("-n", help="Number of bins", type=int, default=100)
 
@@ -1070,7 +1257,7 @@ if __name__ == '__main__':
     parser_get_homopoly.add_argument("-b", help="output in bed file format", default=False, action="store_true")
 
 
-    parser_genome_ranges.set_defaults(func=genome_ranges)
+    parser_genome_ranges.set_defaults(func = genome_ranges)
     parser_genome_ranges.add_argument("fasta", help="Input fasta file", type=argparse.FileType('r'))
     parser_genome_ranges.add_argument("-n", help="Range size", type=int, default=1000000)
     parser_genome_ranges.add_argument("-o", help="output file name", type=str, default='genome_ranges.txt')
@@ -1084,8 +1271,10 @@ if __name__ == '__main__':
     
     parser_exseq.set_defaults(func=extractSeq)
     parser_exseq.add_argument("fasta", help="fasta file", type=argparse.FileType('r'))
+    parser_exseq.add_argument("--chr", help="Chromosome ID", type=str)
     group = parser_exseq.add_mutually_exclusive_group(required=True)
-    group.add_argument("--loc", help="Location to extract: chr start end", nargs=3)
+    group.add_argument("-s", help="Start location", type=int)
+    group.add_argument("-e", help="End location", type=int)
     group.add_argument("--fin", help="File containing locations to extract", type=argparse.FileType('r'))
     parser_exseq.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default=None)
     
