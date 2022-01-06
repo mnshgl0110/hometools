@@ -390,16 +390,20 @@ def extractSeq(args):
         fin[['start', 'end']] = fin[['start', 'end']].astype('int')
         fin.loc[fin['start'] < 0, 'start'] = 0
         fin.sort_values(["chr", "start", "end"], inplace=True)
+        print(fin)
         out = dict()
         chroms = set(fin.chr.values)
         for c, s in readfasta(f).items():
+            print(c, len(s))
             if c in chroms:
-                cdf = fin.loc[fin.chr == fasta.id].copy()
-                cdf.loc[cdf['end'] > len(fasta.seq), 'end'] = len(fasta.seq)
+                cdf = fin.loc[fin.chr == c].copy()
+                cdf.loc[cdf['end'] > len(s), 'end'] = len(s)
                 for row in cdf.itertuples(index=False):
-                    out['{}_{}_{}'.format(c, row[2], row[2])] = s[row.start:(row.end+1)]
+                    out['{}_{}_{}'.format(c, row[1], row[2])] = s[row.start:row.end]
         # Output the selected sequence
         if args.o is not None:
+            warnings.warn("writing output fasta")
+            print(out)
             writefasta(out, args.o.name)
         else:
             for c, s in out.items():
@@ -447,8 +451,8 @@ def fileRemove(fName):
 
 def mergeRanges(ranges):
     """
-    Take a 2D numpy array, with each row as a range and return merged ranges i.e. ranges which are overlapping would be
-    combined as well.
+    Take a 2D numpy array, with each row as a range and return merged ranges
+    i.e. ranges which are overlapping would be combined.
     :param ranges:
     :return:
     """
@@ -456,12 +460,10 @@ def mergeRanges(ranges):
     import numpy as np
     if len(ranges) < 2:
         return ranges
-    ranges = ranges[ranges[:, 0].argsort()]
     for i in ranges:
         if i[0] > i[1]:
-            garb = i[0]
-            i[0] = i[1]
-            i[1] = garb
+            i[1], i[0] = i[0], i[1]
+    ranges = ranges[ranges[:, 0].argsort()]
     min_value = ranges[0, 0]
     max_value = ranges[0, 1]
     out_range = deque()
@@ -473,8 +475,57 @@ def mergeRanges(ranges):
         elif i[1] > max_value:
             max_value = i[1]
     out_range.append([min_value, max_value])
-    return np.array(out_range)           
+    return np.array(out_range)
+#END
 
+def subranges(r1, r2):
+    """
+    Subtract range2 (r2) from range1 (r1) and return non-ooverllaping range.
+    Both ranges are considered closed.
+    """
+    from collections import deque
+    import numpy as np
+    # Get sorted and merged ranges.
+    r1 = mergeRanges(np.array(r1))
+    r2 = mergeRanges(np.array(r2))
+    i = 0
+    j = 0
+    lr1 = len(r1)
+    lr2 = len(r2)
+    cr1 = r1[i]
+    outr = deque()
+    f = False
+    while True:
+        if i == lr1: break
+        if j == lr2:
+            outr.append(cr1)
+            for k in range(i+1, lr1):
+                outr.append(r1[k])
+            f = True
+            break
+        ## Check no overlap conditions
+        if cr1[1] < r2[j][0]:
+            outr.append(cr1)
+            i += 1
+            if i == lr1: break
+            cr1 = r1[i]
+        elif cr1[0] > r2[j][1]:
+            j+=1
+        ## Cases where r1-element ends before r2-element
+        elif cr1[1] <= r2[j][1]:
+            if cr1[0] < r2[j][0]:
+                outr.append([cr1[0], r2[j][0]-1])
+            i += 1
+            if i == lr1: break
+            cr1 = r1[i]
+        ## Cases where r1-element ends after r2-element
+        else:
+            if cr1[0] < r2[j][0]:
+                outr.append([cr1[0], r2[j][0]-1])
+            cr1 = [r2[j][1]+1, cr1[1]]
+            j += 1
+    return(outr)
+#END
 
 def total_size(o, handlers={}, verbose=False):
     try:
@@ -570,11 +621,11 @@ def getScaf(args):
 def seqsize(args):
     from Bio.SeqIO import parse, write
     fin = args.fasta.name
-    out = [(fasta.id, len(fasta.seq)) for fasta in parse(fin,'fasta')]
+    out = [(id, len(seq)) for id, seq in readfasta(fin)]
     for i in out:
-        print(i[0],i[1],sep="\t")
+        print(i[0], i[1], sep="\t")
     if args.t:
-        print("Genome_length",sum([i[1] for i in out]), sep="\t")
+        print("Genome_length", sum([i[1] for i in out]), sep="\t")
 
 
 def filsize(args):
@@ -1275,7 +1326,7 @@ if __name__ == '__main__':
     group = parser_exseq.add_mutually_exclusive_group(required=True)
     group.add_argument("-s", help="Start location", type=int)
     group.add_argument("-e", help="End location", type=int)
-    group.add_argument("--fin", help="File containing locations to extract", type=argparse.FileType('r'))
+    group.add_argument("--fin", help="File containing locations to extract (BED format)", type=argparse.FileType('r'))
     parser_exseq.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default=None)
     
     parser_getscaf.set_defaults(func=getScaf)
