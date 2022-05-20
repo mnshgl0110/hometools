@@ -10,6 +10,106 @@ import argparse
 import os
 import sys
 
+
+class snvdata:
+    """
+    Class to store pileup data. Reads the first six mandatory columns and stores them.
+    Each line is an object.
+    For reading extra column, use the setattr function
+    """
+
+    def __init__(self, ls):
+        self.chr = ls[0]
+        self.pos = int(ls[1])
+        self.ref = ls[2]
+        self.rc  = int(ls[3])
+        self.indelcount, self.bases = [0, []] if self.rc == 0 else self._getbases(ls[4])
+        if len(self.bases) != self.rc:
+            raise Exception('Number of identified bases if not equals to read count for {}:{}. ReadCount: {}, BaseCount: {}'.format(self.chr, self.pos, self.rc, len(self.bases)))
+        self.BQ = [ord(c) - 33 for c in ls[5]]
+
+    def _getbases(self, l):
+        from collections import deque
+        indelcount = 0
+        bases = deque()
+        skip = 0
+        indel = False
+        for c in l:
+            if skip > 0 and indel == False:
+                skip -= 1
+                continue
+            if indel == True:
+                if c in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']:
+                    skip = (skip*10) + int(c)
+                    continue
+                # skip = int(c)
+                else:
+                    indel = False
+                    skip -= 1
+                    continue
+            if c == '*':
+                # self.indelcount += 1
+                # indelcount += 1
+                bases.append(c)
+                continue
+            if c == '$': continue
+            if c in ['<', '>']: sys.exit('spliced alignment found')
+            if c == '^':
+                skip = 1
+                continue
+            if c in ['+', '-']:
+                indel = True
+                indelcount += 1
+                continue
+            bases.append(c)
+        return [indelcount, list(bases)]
+
+    def forwardcnt(self):
+        try:
+            return self.fcnt
+        except AttributeError as e:
+            self.fcnt = len([1 for i in self.bases if i in ['.', 'A', 'C', 'G', 'T']])
+            self.rcnt = self.rc - self.fcnt
+            return self.fcnt
+
+    def reversecnt(self):
+        try:
+            return self.rcnt
+        except AttributeError as e:
+            self.rcnt = len([1 for i in self.bases if i in [',', 'a', 'c', 'g', 't']])
+            self.fcnt = self.rc - self.rcnt
+            return self.rcnt
+
+    def basecnt(self, base):
+        return len([1 for i in self.bases if i == base])
+
+    def getBQ(self, base):
+        return [self.BQ[i] for i in range(len(self.bases)) if self.bases[i] == base]
+
+    def getindelreads(self, bases, reads):
+        from collections import deque
+        self.indelreads = deque()
+        reads = reads.split(",")
+        for i in range(len(reads)):
+            if bases[0] == '^':
+                bases == bases[3:]
+                continue
+            if bases[0] == '$':
+                bases = bases[1:]
+            if len(bases) == 1:
+                continue
+            if bases[1] not in ['+', '-']:
+                bases = bases[1:]
+            else:
+                self.indelreads.append(reads[i])
+                bases = bases[2:]
+                skip = 0
+                while bases[0] in {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'}:
+                    skip = (skip*10) + int(bases[0])
+                    bases = bases[1:]
+                bases = bases[skip:]
+# END
+
 def cgtpl(cg):
     """
     Takes a cigar string as input and returns a cigar tuple
@@ -83,14 +183,14 @@ def cummaxf(array):
 def order(*args):
     if len(args) > 1:
         if args[1].lower() == 'false':# if ($string1 eq $string2) {
-            return sorted(range(len(args[0])), key = lambda k: args[0][k])
+            return sorted(range(len(args[0])), key=lambda k: args[0][k])
         elif list(args[1].lower()) == list('true'):
-            return sorted(range(len(args[0])), key = lambda k: args[0][k], reverse = True)
+            return sorted(range(len(args[0])), key=lambda k: args[0][k], reverse=True)
         else:
             print("{} isn't a recognized parameter".format(args[1]))
             sys.exit()
     elif len(args) == 1:
-        return sorted(range(len(args[0])), key = lambda k: args[0][k])
+        return sorted(range(len(args[0])), key=lambda k: args[0][k])
 #end
  
 def p_adjust(*args):
@@ -319,6 +419,40 @@ def writefasta(fa, f):
             fo.write('>'+k+'\n')
             for i in range(0, len(v), 60):
                 fo.write(v[i:(i+60)]+'\n')
+#END
+
+
+def density_scatter(x, y, ax=None, fig=None, sort=True, bins=20, **kwargs):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib import cm
+    from matplotlib.colors import Normalize
+    from scipy.interpolate import interpn
+    # import seaborn as sns         # Can be used if regression fit is required, but is not working very well with the scatter kwargs
+    """
+    Scatter plot colored by 2d histogram
+    Usage example:
+        x = np.random.normal(size=100000)
+        y = x * 3 + np.random.normal(size=100000)
+        density_scatter( x, y, bins = [30,30] )
+    """
+    if ax is None:
+        fig, ax = plt.subplots()
+    data, x_e, y_e = np.histogram2d(x, y, bins=bins, density=True)
+    z = interpn((0.5*(x_e[1:] + x_e[:-1]), 0.5*(y_e[1:]+y_e[:-1])), data, np.vstack([x, y]).T, method="splinef2d", bounds_error=False)
+    # To be sure to plot all data
+    z[np.where(np.isnan(z))] = 0.0
+    # Sort the points by density, so that the densest points are plotted last
+    if sort:
+        idx = z.argsort()
+        x, y, z = x[idx], y[idx], z[idx]
+    # ax = sns.regplot(x=x, y=y, scatter_kws={"s": 0.5}, ax=ax)
+    ax.scatter(x, y, c=z, **kwargs)
+    norm = Normalize(vmin=np.min(z), vmax=np.max(z))
+    cbar = fig.colorbar(cm.ScalarMappable(norm=norm), ax=ax)
+    cbar.ax.set_ylabel('Density')
+    return ax
+# END
 
 
 # def extractSeq(args):
@@ -365,10 +499,11 @@ def writefasta(fa, f):
 
 def extractSeq(args):
     # TODO: Fix this function to work with new parameter style
+    print(args, type(args.o.name))
     import pandas as pd
     import warnings
-    if args.fin.name is not None:
-        if args.chr is not None or args.s is not None or args.e is not None:
+    if args.fin is not None:
+        if args.chr is not None or args.start is not None or args.end is not None:
             warnings.warn("Using --fin. Ignoring --chr, -s, -e")
     f = args.fasta.name
     if args.fin is None:
@@ -376,12 +511,12 @@ def extractSeq(args):
         q = {c: s for c, s in readfasta(f).items() if c == seqid}
         if len(q) > 1:
             sys.exit("Found multiple chromosomes with same ID. Exiting.")
-        start = int(args.s) if args.s is not None else 0
-        end = int(args.e) if args.e is not None else len(q[seqid])
+        start = int(args.start) if args.start is not None else 0
+        end = int(args.end) if args.end is not None else len(q[seqid])
         end = end if end <= len(q[seqid]) else len(q[seqid])
         # Output the selected sequence
         if args.o is not None:
-            writefasta({seqid: q[seqid][start:(end+1)]}, args.o)
+            writefasta({seqid: q[seqid][start:(end+1)]}, args.o.name)
         else:
             print("> {}\n{}".format(seqid, q[seqid][start:(end+1)]))
     else:
@@ -390,7 +525,6 @@ def extractSeq(args):
         fin[['start', 'end']] = fin[['start', 'end']].astype('int')
         fin.loc[fin['start'] < 0, 'start'] = 0
         fin.sort_values(["chr", "start", "end"], inplace=True)
-        print(fin)
         out = dict()
         chroms = set(fin.chr.values)
         for c, s in readfasta(f).items():
@@ -403,7 +537,6 @@ def extractSeq(args):
         # Output the selected sequence
         if args.o is not None:
             warnings.warn("writing output fasta")
-            print(out)
             writefasta(out, args.o.name)
         else:
             for c, s in out.items():
@@ -617,15 +750,15 @@ def getScaf(args):
             scafGenome.append(SeqRecord(seq=gen[key].seq, id = key, description=""))
     write(scafGenome,fout,"fasta")
 
-
 def seqsize(args):
-    from Bio.SeqIO import parse, write
     fin = args.fasta.name
-    out = [(id, len(seq)) for id, seq in readfasta(fin)]
+    out = [(chrom, len(seq)) for chrom, seq in readfasta(fin).items()]
+    #TODO: Add output file
     for i in out:
         print(i[0], i[1], sep="\t")
     if args.t:
         print("Genome_length", sum([i[1] for i in out]), sep="\t")
+#END
 
 
 def filsize(args):
@@ -638,13 +771,12 @@ def filsize(args):
     size= args.size
     gen = [fasta for fasta in parse(fin,'fasta') if len(fasta.seq) > size]
     write(gen, fin.split(".fna")[0].split("/")[-1]+".filtered.fna", "fasta")
-
+#END
 
 def basrat(args):
-    from Bio.SeqIO import parse
-    from collections import Counter 
+    from collections import Counter
     fin = args.fasta.name
-    count = {fasta.id:dict(Counter(fasta.seq)) for fasta in parse(fin, "fasta")}
+    count = {chrom: dict(Counter(seq)) for chrom, seq in readfasta(fin).items()}
     outD = {}
     for v in count.values():
         for k, cnt in v.items():
@@ -652,30 +784,21 @@ def basrat(args):
                 outD[k] += cnt
             else:
                 outD[k] = cnt
-    for k,v in outD.items():
-        print(k, v, sep = "\t")
-    
+    for k, v in outD.items():
+        print(k, v, sep="\t")
+#END
 
 def getchr(args):
-    from Bio.SeqIO import parse
-    from gzip import open as gzopen
     fin = args.fasta.name
     if args.chrs is None and args.F is not None: chroms = [c.strip() for c in open(args.F.name, 'r').readlines()]
     elif args.chrs is not None and args.F is None: chroms = args.chrs
     else: raise Exception('InvalidValue: Incorrect value for chrs provided')
     out = args.o.name if args.o is not None else fin + ".filtered.fasta"
     with open(out, 'w') as fout:
-        try:
-            finh = gzopen(fin, 'rt')
-            for fasta in parse(finh, 'fasta'):
-                if (fasta.id in chroms) != args.v:
-                    fout.write(">" + fasta.id + "\n" + "\n".join([str(fasta.seq[i:i+60]) for i in range(0, len(fasta.seq), 60)]) + '\n')
-        except OSError:
-            finh = open(fin, 'rt')
-            for fasta in parse(finh, 'fasta'):
-                if (fasta.id in chroms) != args.v:
-                    fout.write(">" + fasta.id + "\n" + "\n".join([str(fasta.seq[i:i+60]) for i in range(0, len(fasta.seq), 60)]) + '\n')
-
+        for chrom, seq in readfasta(fin).items():
+            if (chrom in chroms) != args.v:
+                fout.write(">" + chrom + "\n" + "\n".join([seq[i:i+60] for i in range(0, len(seq), 60)]) + '\n')
+#END
 
 def genome_ranges(args):
     import os
@@ -698,27 +821,22 @@ def genome_ranges(args):
             for i in range(len(r1)):
                 fout.write(start + str(id) + "\t" + str(r1[i]) + "\t" + str(r2[i]))
                 start = '\n'
-
+#END
 
 def get_homopoly(args):
     import os
     import sys
-
     if args.n < 2:
         sys.exit('Minimum allowed homopolymer length = 2')
     if os.path.isfile(args.o):
         sys.exit(args.o + ' exists. Cannot overwrite it.')
-
     import re
     from collections import OrderedDict
-    from Bio.SeqIO import parse
     isbed = 1 if args.b else 0
-
     start = ''
     with open(args.o, 'w') as fout:
-        for fasta in parse(args.fasta, 'fasta'):
-            s = str(fasta.seq)
-            id = fasta.id
+        for chrom, s in readfasta(args.fasta.name).items():
+            # id = fasta.id
             outdict = {}
             for b in ['A', 'C', 'G', 'T']:
                 hp = b * args.n + '+'
@@ -727,31 +845,38 @@ def get_homopoly(args):
                 for i in r:
                     outdict[i.start() - isbed] = [i.end(), b]
             for i in sorted(outdict.keys()):
-                fout.write(start + str(id) + "\t" + str(i+1 - args.p) + "\t" + str(outdict[i][0] + args.p) + "\t" + outdict[i][1])
+                fout.write(start + str(chrom) + "\t" + str(i+1 - args.p) + "\t" + str(outdict[i][0] + args.p) + "\t" + outdict[i][1])
                 start = '\n'
+#END
 
-
-def asstat(fin, parse):
-    from numpy import cumsum
+def asstat(fin):
+    from collections import deque
     fasta_len = deque()
-    for fasta in parse(fin, 'fasta'):
-        fasta_len.append(len(str(fasta.seq)))
+    for chrom, seq in readfasta(fin).items():
+        fasta_len.append(len(seq))
     fasta_len = sorted(fasta_len)
-    fasta_len_cumsum = cumsum(fasta_len)
+
+    fasta_len_cumsum = deque()
+    last = 0
+    for i in fasta_len:
+        fasta_len_cumsum.append(last + i)
+        last = last + i
     half = fasta_len_cumsum[-1]/2
     for i in range(len(fasta_len_cumsum)):
         if fasta_len_cumsum[i] > half:
             return [fasta_len_cumsum[-1], len(fasta_len), fasta_len[-1], fasta_len[0], fasta_len[i], len(fasta_len)-i]
-
+#END
 
 def getasstat(args):
+    from collections import deque
+    from multiprocessing import Pool
+    from functools import partial
     out = args.o.name if args.o is not None else "genomes.n50"
-    NC = args.n
-
+    nc = args.n
     from collections import deque
     fins = deque()
     if args.F is None and args.G is None:
-        sys.exit("1Provide genome file path in -F or -G")
+        sys.exit("Provide genome file path in -F or -G")
     elif args.F is not None and args.G is not None:
         sys.exit("Provide genome file path in -F or -G")
     elif args.F is not None:
@@ -760,17 +885,51 @@ def getasstat(args):
                 fins.append(line.strip())
     elif args.G is not None:
         fins = args.G
-
-    from multiprocessing import Pool
-    from functools import partial
-    from Bio.SeqIO import parse
-    with Pool(processes=NC) as pool:
-        n50_values = pool.map(partial(asstat, parse=parse), fins)
-
+    with Pool(processes=nc) as pool:
+        n50_values = pool.map(partial(asstat), fins)
     with open(out, 'w') as fout:
         fout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format("assemble_id", "assembly_length", "number_of_contig", "longest_contig", "shortest_contig", "N50", "L50"))
         for i in range(len(fins)):
             fout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(fins[i], n50_values[i][0], n50_values[i][1], n50_values[i][2], n50_values[i][3], n50_values[i][4], n50_values[i][5]))
+#END
+
+# def asstat(fin, parse):
+#     from numpy import cumsum
+#     fasta_len = deque()
+#     for fasta in parse(fin, 'fasta'):
+#         fasta_len.append(len(str(fasta.seq)))
+#     fasta_len = sorted(fasta_len)
+#     fasta_len_cumsum = cumsum(fasta_len)
+#     half = fasta_len_cumsum[-1]/2
+#     for i in range(len(fasta_len_cumsum)):
+#         if fasta_len_cumsum[i] > half:
+#             return [fasta_len_cumsum[-1], len(fasta_len), fasta_len[-1], fasta_len[0], fasta_len[i], len(fasta_len)-i]
+#
+#
+# def getasstat(args):
+#     out = args.o.name if args.o is not None else "genomes.n50"
+#     NC = args.n
+#     from collections import deque
+#     fins = deque()
+#     if args.F is None and args.G is None:
+#         sys.exit("1Provide genome file path in -F or -G")
+#     elif args.F is not None and args.G is not None:
+#         sys.exit("Provide genome file path in -F or -G")
+#     elif args.F is not None:
+#         with open(args.F.name, 'r') as F:
+#             for line in F:
+#                 fins.append(line.strip())
+#     elif args.G is not None:
+#         fins = args.G
+#     from multiprocessing import Pool
+#     from functools import partial
+#     from Bio.SeqIO import parse
+#     with Pool(processes=NC) as pool:
+#         n50_values = pool.map(partial(asstat, parse=parse), fins)
+#     with open(out, 'w') as fout:
+#         fout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format("assemble_id", "assembly_length", "number_of_contig", "longest_contig", "shortest_contig", "N50", "L50"))
+#         for i in range(len(fins)):
+#             fout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(fins[i], n50_values[i][0], n50_values[i][1], n50_values[i][2], n50_values[i][3], n50_values[i][4], n50_values[i][5]))
 
 
 def plthist(args):
@@ -962,7 +1121,6 @@ def bamcov(args):
     from subprocess import Popen, PIPE
     import warnings
 
-
     formatwarning_orig = warnings.formatwarning
     warnings.formatwarning = lambda message, category, filename, lineno, line=None:    formatwarning_orig(message, category, filename, lineno, line='')
 
@@ -972,9 +1130,6 @@ def bamcov(args):
     if BED is not None:
         sys.exit("SELECTING REGIONS (-R) HAS NOT BEEN IMPLEMENTED YET. PLEASE DO NOT USE IT.")
     D = args.d
-    # print(BAM, OUT, D)
-    # sys.exit()
-    print(BAM)
     if not os.path.isfile(BAM):
         sys.exit('BAM file is not found: {}'.format(BAM))
 
@@ -1009,9 +1164,7 @@ def bamcov(args):
         o = p.communicate()
         if o[1] != b'':
             sys.exit("Error in using samtools depth:\n{}".format(o[1].decode()))
-
-    chrrd = {c:0 for c in chrlen.keys()}
-
+    chrrd = {c: 0 for c in chrlen.keys()}
     with open(tname, 'r') as fin:
         for line in fin:
             line = line.strip().split()
@@ -1023,10 +1176,11 @@ def bamcov(args):
     with open(OUT, 'w') as fout:
         for k, v in chrrd.items():
             fout.write("{}\t{}\n".format(k, v/chrlen[k]))
-
+        if args.g:
+            fout.write("Genome\t{}\n".format(round(sum(chrrd.values())/sum(chrlen.values()))))
     os.remove(tname)
     # TODO: Add method to filter for BED regions
-
+# END
 
 def run_bam_readcount(tmp_com, outfile):
     from subprocess import Popen, PIPE
@@ -1051,11 +1205,14 @@ def pbamrc(args):
     import numpy as np
     from time import time
     import os
+
+    INDEL = args.I
     bed = pd.read_table(args.l.name, header=None)
-    splits = np.array_split(range(bed.shape[0]), N)
+    split_N = bed.shape[0] if args.S else N
+    splits = np.array_split(range(bed.shape[0]), split_N)
     tmp_df = [bed.iloc[i] for i in splits]
     pre = str(time()).replace(".", "")
-    for i in range(N):
+    for i in range(split_N):
         tmp_df[i].to_csv(str(pre)+'_'+str(i)+".bed", sep='\t', header=False, index=False)
 
     command = "bam-readcount"
@@ -1069,25 +1226,36 @@ def pbamrc(args):
     if args.i : command += " -i"
 
     commands = deque()
-    for i in range(N):
+    for i in range(split_N):
         tname = str(pre)+'_'+str(i)+".rc"
         tmp_com = command + ' -l ' + str(pre)+'_'+str(i)+".bed" + ' ' + args.bam.name
         commands.append([tmp_com, tname])
 
     with Pool(processes=N) as pool:
-        pool.starmap(run_bam_readcount, commands)
-
+        pool.starmap(run_bam_readcount, commands, chunksize=1)
     with open(args.o.name, 'w') as fout:
-        for i in range(N):
+    # with open('tmp.txt', 'w') as fout:
+        for i in range(split_N):
             with open(str(pre)+'_'+str(i)+".rc", 'r') as fin:
+                count = 0
+                s = deque()
                 for line in fin:
+                    count += 1
+                    if count == 1000000:
+                        fout.write("\n".join(s)+"\n")
+                        s = deque()
+                        count = 0
                     line = line.strip().split()
                     outstr = deque(line[:4])
-                    for i in range(5,10):
-                        outstr.append(line[i].split(":")[1])
-                    fout.write("\t".join(outstr) + "\n")
+                    for j in range(5, 10):
+                        outstr.append(line[j].split(":")[1])
+                    if INDEL:
+                        for j in range(10, len(line)):
+                            outstr.extend(line[j].split(":")[:2])
+                    s.append("\t".join(outstr))
+                fout.write("\n".join(s)+"\n")
 
-    for i in range(N):
+    for i in range(split_N):
         os.remove(str(pre)+'_'+str(i)+".bed")
         os.remove(str(pre)+'_'+str(i)+".rc")
 
@@ -1184,12 +1352,25 @@ def splitbam(args):
                 f.write(r)
 #END
 
+def gfatofa(args):
+    gfa = args.gfa.name
+    fa = args.fa.name
+    from collections import OrderedDict
+    gendict = OrderedDict()
+    with open(gfa, 'r') as fin:
+        for line in fin:
+            if line[0] == 'S':
+                line = line.strip().split()
+                gendict[line[1]] = line[2]
+    writefasta(gendict, fa)
+    print("Finished")
+#END
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     subparsers = parser.add_subparsers()
     parser_getchr  = subparsers.add_parser("getchr", help="Get specific chromosomes from the fasta file")
-    parser_exseq   = subparsers.add_parser("exseq", help="extract sequence from fasta")
+    parser_exseq   = subparsers.add_parser("exseq", help="extract sequence from fasta", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_getscaf = subparsers.add_parser("getscaf", help="generate scaffolds from a given genome")
     parser_seqsize = subparsers.add_parser("seqsize", help="get size of dna sequences in a fasta file")
     parser_filsize = subparsers.add_parser("filsize", help="filter out smaller molecules")
@@ -1208,20 +1389,27 @@ if __name__ == '__main__':
     # parser_parallel = subparsers.add_parser("parallel", help="Run bam-readcount in a parallel manner by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_ppileup = subparsers.add_parser("ppileup", help="Currently it is slower than just running mpileup on 1 CPU. Might be possible to optimize later. Run samtools mpileup in parallel when pileup is required for specific positions by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_splitbam = subparsers.add_parser("splitbam", help="Split a BAM files based on TAG value. BAM file must be sorted using the TAG.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
+    # TODO: Add functionality for sampling rows
+    parser_samplerow = subparsers.add_parser("smprow", help="Select random rows from a text file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    #
+    parser_gfatofa = subparsers.add_parser("gfatofa", help="Convert a gfa file to a fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
 
-    ## Split BAM
+    # gfatofa
+    parser_gfatofa.set_defaults(func=gfatofa)
+    parser_gfatofa.add_argument("gfa", help="Input GFA file", type=argparse.FileType('r'))
+    parser_gfatofa.add_argument("fa", help="output fasta file name", type=argparse.FileType('w'))
+
+    # Split BAM
     parser_splitbam.set_defaults(func=splitbam)
     parser_splitbam.add_argument("bam", help="BAM file", type=argparse.FileType('r'))
     parser_splitbam.add_argument("tag", help="tag to be used for splitting the BAM file", type=str)
     parser_splitbam.add_argument("-f", help="Alignments format BAM(b)/SAM(s)/CRAM(c) format", type=str, choices=['b', 's', 'c'], default='b')
-    parser_splitbam.add_argument("-o", help="Output alignment format BAM(b)/SAM(s)/CRAM(c) format", type=str, choices=['b','s','c'], default='b')
+    parser_splitbam.add_argument("-o", help="Output alignment format BAM(b)/SAM(s)/CRAM(c) format", type=str, choices=['b', 's', 'c'], default='b')
     parser_splitbam.add_argument("-m", help="Minimum number of reads required for a barcode", type=int, default=100)
-
 
     parser_ppileup.set_defaults(func=ppileup)
     parser_ppileup.add_argument("n", help="Number of CPU cores to use", type=int, default=1)
@@ -1242,7 +1430,9 @@ if __name__ == '__main__':
     parser_pbamrc.add_argument("-p", help="report results by library.", default=False, action='store_true')
     parser_pbamrc.add_argument("-w", help="maximum number of warnings of each type to emit. -1 gives an unlimited number.", type=int, default=-1)
     parser_pbamrc.add_argument("-i", help="generate indel centric readcounts. Reads containing insertions will not be included in per-base counts", default=False, action='store_true')
+    parser_pbamrc.add_argument("-I", help="Output indels as well.", default=False, action='store_true')
     parser_pbamrc.add_argument("-n", help="Number of CPU cores to use", type=int, default=1)
+    parser_pbamrc.add_argument("-S", help="Run jobs in sequentially (each line from bed starts a new job). By default, jobs are run in batches (by dividing the BED file)", action='store_true', default=False)
     parser_pbamrc.add_argument("o", help="Output file name", type=argparse.FileType('w'))
 
 
@@ -1250,6 +1440,7 @@ if __name__ == '__main__':
     parser_bamcov.add_argument("bam", help="Input BAM file. Must have the SQ/SN/ tags for chromosome name and length", type=argparse.FileType('r'))
     parser_bamcov.add_argument("out", help="Output file name", type=argparse.FileType('w'))
     parser_bamcov.add_argument("-r", help="BED file containing genomic regions to use", type=argparse.FileType('r'))
+    parser_bamcov.add_argument("-g", help="Also output genomic mean coverage", default=False, action='store_true')
     parser_bamcov.add_argument("-d", help="Samtools depth command to use. Provide within double inverted quotes (\") ", type=str, default="samtools depth -d 0")
 
 
@@ -1294,8 +1485,8 @@ if __name__ == '__main__':
 
 
     parser_n50.set_defaults(func=getasstat)
-    parser_n50.add_argument("-F", help="File containing path to genomes (one genome per line)", type=argparse.FileType('r'))
     parser_n50.add_argument("-G", help="Path to genome/s to calculate n50", nargs='*')
+    parser_n50.add_argument("-F", help="File containing path to genomes (one genome per line)", type=argparse.FileType('r'))
     parser_n50.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default=None)
     parser_n50.add_argument("-n", help="number of processors to use", type=int, default=1)
 
@@ -1323,10 +1514,9 @@ if __name__ == '__main__':
     parser_exseq.set_defaults(func=extractSeq)
     parser_exseq.add_argument("fasta", help="fasta file", type=argparse.FileType('r'))
     parser_exseq.add_argument("--chr", help="Chromosome ID", type=str)
-    group = parser_exseq.add_mutually_exclusive_group(required=True)
-    group.add_argument("-s", help="Start location", type=int)
-    group.add_argument("-e", help="End location", type=int)
-    group.add_argument("--fin", help="File containing locations to extract (BED format)", type=argparse.FileType('r'))
+    parser_exseq.add_argument("-start", help="Start location", type=int)
+    parser_exseq.add_argument("-end", help="End location", type=int)
+    parser_exseq.add_argument("--fin", help="File containing locations to extract (BED format)", type=argparse.FileType('r'))
     parser_exseq.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default=None)
     
     parser_getscaf.set_defaults(func=getScaf)
