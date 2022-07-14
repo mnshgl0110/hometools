@@ -1450,7 +1450,7 @@ def faline(args):
 # END
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser("Collections of command-line functions to perform common pre-processing and analysis functions.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     subparsers = parser.add_subparsers()
     parser_getchr  = subparsers.add_parser("getchr", help="Get specific chromosomes from the fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_sampfa  = subparsers.add_parser("sampfa", help="Sample random sequences from a fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)

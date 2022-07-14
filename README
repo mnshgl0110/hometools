@@ -1,1 +1,42 @@
-Collections of command-line functions to perform common pre-processing and analysis functions.
+usage: Collections of command-line functions to perform common pre-processing and analysis functions.
+       [-h]
+       {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,plthist,gfftrans,vcfdp,gffsort,getcol,bamcov,pbamrc,ppileup,splitbam,smprow,gfatofa,faline}
+       ...
+
+positional arguments:
+  {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,plthist,gfftrans,vcfdp,gffsort,getcol,bamcov,pbamrc,ppileup,splitbam,smprow,gfatofa,faline}
+    getchr              Get specific chromosomes from the fasta file
+    sampfa              Sample random sequences from a fasta file
+    exseq               extract sequence from fasta
+    getscaf             generate scaffolds from a given genome
+    seqsize             get size of dna sequences in a fasta file
+    filsize             filter out smaller molecules
+    subnuc              Change character (in all sequences) in the fasta file
+    basrat              Calculate the ratio of every base in the genome
+    genome_ranges       Get a list of genomic ranges of a given size
+    get_homopoly        Find homopolymeric regions in a given fasta file
+    asstat              Get N50 values for the given list of chromosomes
+    plthist             Takes frequency output (like from uniq -c) and
+                        generates a histogram plot
+    gfftrans            Get transcriptome (gene sequence) for all genes in a
+                        gff file. WARNING: THIS FUNCTION MIGHT HAVE BUGS.
+    vcfdp               Get DP and DP4 values from a VCF file.
+    gffsort             Sort a GFF file based on the gene start positions
+    getcol              Select columns from a TSV or CSV file using column
+                        names
+    bamcov              Get mean read-depth for chromosomes from a BAM file
+    pbamrc              Run bam-readcount in a parallel manner by dividing the
+                        input bed file.
+    ppileup             Currently it is slower than just running mpileup on 1
+                        CPU. Might be possible to optimize later. Run samtools
+                        mpileup in parallel when pileup is required for
+                        specific positions by dividing the input bed file.
+    splitbam            Split a BAM files based on TAG value. BAM file must be
+                        sorted using the TAG.
+    smprow              Select random rows from a text file
+    gfatofa             Convert a gfa file to a fasta file
+    faline              Convert fasta file from single line to multi line or
+                        vice-versa
+
+optional arguments:
+  -h, --help            show this help message and exit
