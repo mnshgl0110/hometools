@@ -4,11 +4,35 @@
 Created on Mon Jun 19 15:36:01 2017
 
 @author: goel
+Usage:
+import sys
+sys.path.insert(0, '/srv/biodata/dep_mercier/grp_schneeberger/software/hometools/')
+from myUsefulFunctions import *
 """
 
 import argparse
 import os
 import sys
+
+class Namespace:
+    """
+    Use this to create args object for parsing to functions
+    args = Namespace(a=1, b='c')
+    print(args.a, args.b)
+    """
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+# END
+
+def randomstring(l):
+    """
+    l = length of the string
+    returns a random string of size l
+    """
+    from random import choices
+    from string import ascii_letters as letters
+    return ''.join(choices(letters, k=l))
+# END
 
 
 class snvdata:
@@ -110,6 +134,7 @@ class snvdata:
                 bases = bases[skip:]
 # END
 
+
 def cgtpl(cg):
     """
     Takes a cigar string as input and returns a cigar tuple
@@ -117,7 +142,8 @@ def cgtpl(cg):
     for i in "MIDNSHPX=":
         cg = cg.replace(i, ';'+i+',')
     return [i.split(';') for i in cg.split(',')[:-1]]
-#end
+# END
+
 
 def cggenlen(cg, gen):
     """
@@ -133,7 +159,8 @@ def cggenlen(cg, gen):
     s = set(['M', 'D', 'N', '=', 'X']) if gen == 'r' else set(['M', 'I', 'S', '=', 'X'])
     l = sum([int(i[0]) for i in cg if i[1] in s])
     return l
-#end
+# END
+
 
 def mergepdf(fins, fout):
     """
@@ -146,7 +173,8 @@ def mergepdf(fins, fout):
     # Write all the files into a file which is named as shown below
     mergedObject.write(fout)
     return
-#end function
+# END
+
 
 def pminf(array):
     x = 1
@@ -158,7 +186,8 @@ def pminf(array):
         else:
             pmin_list.insert(index, x)
     return pmin_list
-#end function
+# END
+
  
 def cumminf(array):
     cummin = []
@@ -168,7 +197,8 @@ def cumminf(array):
             cumulative_min = p
         cummin.append(cumulative_min)
     return cummin
-#end
+# END
+
  
 def cummaxf(array):
     cummax = []
@@ -178,7 +208,8 @@ def cummaxf(array):
             cumulative_max = e
         cummax.append(cumulative_max)
     return cummax
-#end
+# END
+
  
 def order(*args):
     if len(args) > 1:
@@ -191,7 +222,8 @@ def order(*args):
             sys.exit()
     elif len(args) == 1:
         return sorted(range(len(args[0])), key=lambda k: args[0][k])
-#end
+# END
+
  
 def p_adjust(*args):
     """
@@ -299,7 +331,8 @@ def p_adjust(*args):
         print("method {} isn't defined.".format(method))
         sys.exit()
     return qvalues
-#end
+# END
+
  
 def unlist(nestedList):
     import numpy as np
@@ -311,15 +344,18 @@ def unlist(nestedList):
         else:
             outList.append(i)
     return(outList)
+# END
 
 
 def getValues(l, index):
     """from list l get the values at indices specified by index"""
     return [l[i] for i in index]
+# END
 
 
 def getColors(colorPalette, numOfCol):
 	return([colorPalette(i/numOfCol) for i in range(numOfCol)])
+# END
 
 
 def plotdensity(data):
@@ -332,16 +368,19 @@ def plotdensity(data):
     density._compute_covariance()
     plt.plot(xs, density(xs))
     plt.show()
-#end
+# END
+
 
 def sublist(lst1, lst2):
     import operator as op
     return(list(map(op.sub,lst1, lst2)))
-#end
+# END
+
 
 def intersect(*lists):
     import numpy as np
     return reduce(np.intersect1d,list(lists))
+# END
 
 
 def readblast(f):
@@ -350,9 +389,11 @@ def readblast(f):
     """
     import pandas as pd
     return pd.read_table(f, comment="#")
+# END
 
 
 def readfasta(f):
+    # TODO: This takes too long when used with getchr for large genomes. Try to optimise FASTA reading when the entire genome is not needed.
     from gzip import open as gzopen
     from gzip import BadGzipFile
     from collections import deque
@@ -360,7 +401,6 @@ def readfasta(f):
     out = {}
     chrid = ''
     chrseq = deque()
-
     # Test if the file is Gzipped or not
     with gzopen(f, 'rb') as fin:
         try:
@@ -368,7 +408,6 @@ def readfasta(f):
             isgzip = True
         except BadGzipFile:
             isgzip = False
-
     try:
         if isgzip:
             with gzopen(f, 'rb') as fin:
@@ -405,6 +444,7 @@ def readfasta(f):
         out[chrid] = ''.join(chrseq)
     # TODO: add check for the validation of input fasta files
     return out
+# END
 
 
 def writefasta(fa, f):
@@ -412,14 +452,24 @@ def writefasta(fa, f):
     :param fa: dictionary. Keys are chromosome ids. Values are sequence.
     :param f: Output file
     :return:
+    Can output .gz file if output file name ends with .gz
     """
-    # TODO: Add capability to write fa.gzip files as well
-    with open(f, 'w') as fo:
+    # TODO: write bgzip file
+    # from pysam import tabix_compress as gzopen
+    from gzip import open as gzopen
+    isgzip = f.rsplit('.', 1)[-1] == 'gz'
+    # b, nl >> Begin character, new line
+    op, openstr, b, nl = (gzopen, 'wb', b'>', b'\n') if isgzip else (open, 'w', '>', '\n')
+    with op(f, openstr) as fo:
         for k, v in fa.items():
-            fo.write('>'+k+'\n')
-            for i in range(0, len(v), 60):
-                fo.write(v[i:(i+60)]+'\n')
-#END
+            if isgzip:
+                k = k.encode()
+                v = v.encode()
+            fo.write(b+k+nl)
+            fo.write(nl.join([v[i:i+60] for i in range(0, len(v), 60)]) + nl)
+            # for i in range(0, len(v), 60):
+            #     fo.write(v[i:(i+60)]+nl)
+# END
 
 
 def density_scatter(x, y, ax=None, fig=None, sort=True, bins=20, **kwargs):
@@ -455,51 +505,8 @@ def density_scatter(x, y, ax=None, fig=None, sort=True, bins=20, **kwargs):
 # END
 
 
-# def extractSeq(args):
-#     # TODO: Fix this function to work with new parameter style
-#     # TODO: Use in-built fasta parser/writer and remove dependency on Bio.SeqIO
-#     import pandas as pd
-#     from Bio.SeqRecord import SeqRecord
-#     from Bio.SeqIO import parse, write
-#     filePath = args.fasta.name
-#     if args.fin == None:
-#        seqID = args.loc[0]
-#        querySeq = [fasta for fasta in parse(filePath, 'fasta') if fasta.id == seqID][0]
-#
-#        start = int(args.s) if args.s is not None else 0
-#        end = int(args.e) if args.e is not None else 0
-#        end = end if end <= len(querySeq.seq) else len(querySeq.seq)
-#
-#        querySeq.seq = querySeq.seq[int(start):(int(end)+1)]
-#        if args.o != None:
-#            write(querySeq, args.o, "fasta")
-#        else:
-#            print("> "+querySeq.id)
-#            print(querySeq.seq)
-#     else:
-#         fin = pd.read_table(args.fin.name, header=None, delim_whitespace=True)
-#         fin.columns = ["chr", "start", "end"]
-#         fin[['start', 'end']] = fin[['start', 'end']].astype('int')
-#         fin.loc[fin['start'] < 0, 'start'] = 0
-#         fin.sort_values(["chr", "start", "end"], inplace=True)
-#         outF = deque()
-#         for fasta in parse(filePath, 'fasta'):
-#             if fasta.id in fin.chr.values:
-#                 chrData = fin.loc[fin.chr == fasta.id].copy()
-#                 chrData.loc[chrData['end'] > len(fasta.seq), 'end'] = len(fasta.seq)
-#                 for row in chrData.itertuples(index=False):
-#                     outF.append(SeqRecord(seq=fasta.seq[row.start:row.end], id="_".join(map(str, row)), description=""))
-#         if args.o != None:
-#             write(outF, args.o.name, "fasta")
-#         else:
-#            for i in outF:
-#                 print("> "+i.id)
-#                 print(i.seq)
-#END
-
 def extractSeq(args):
     # TODO: Fix this function to work with new parameter style
-    print(args, type(args.o.name))
     import pandas as pd
     import warnings
     if args.fin is not None:
@@ -516,9 +523,9 @@ def extractSeq(args):
         end = end if end <= len(q[seqid]) else len(q[seqid])
         # Output the selected sequence
         if args.o is not None:
-            writefasta({seqid: q[seqid][start:(end+1)]}, args.o.name)
+            writefasta({seqid: q[seqid][start:end]}, args.o.name)
         else:
-            print("> {}\n{}".format(seqid, q[seqid][start:(end+1)]))
+            print("> {}\n{}".format(seqid, q[seqid][start:end]))
     else:
         fin = pd.read_table(args.fin.name, header=None, delim_whitespace=True)[[0, 1, 2]]
         fin.columns = ["chr", "start", "end"]
@@ -528,7 +535,6 @@ def extractSeq(args):
         out = dict()
         chroms = set(fin.chr.values)
         for c, s in readfasta(f).items():
-            print(c, len(s))
             if c in chroms:
                 cdf = fin.loc[fin.chr == c].copy()
                 cdf.loc[cdf['end'] > len(s), 'end'] = len(s)
@@ -536,12 +542,12 @@ def extractSeq(args):
                     out['{}_{}_{}'.format(c, row[1], row[2])] = s[row.start:row.end]
         # Output the selected sequence
         if args.o is not None:
-            warnings.warn("writing output fasta")
             writefasta(out, args.o.name)
         else:
             for c, s in out.items():
                 print("> {}\n{}".format(c, s))
 # END
+
 
 def revcomp(seq):
     assert type(seq) == str
@@ -549,6 +555,7 @@ def revcomp(seq):
     rev = 'TGCAYRMKVHDBtgcayrmkvhdb'
     tab = str.maketrans(old, rev)
     return seq.translate(tab)[::-1]
+# END
 
 
 def subnuc(args):
@@ -572,6 +579,7 @@ def subnuc(args):
             f.write('\n'.join(str(seq.seq)[i:i+60] for i in range(0, len(seq.seq), 60)))
             if spacer == "":
                 spacer = "\n"
+# END
 
 
 def fileRemove(fName):
@@ -580,7 +588,8 @@ def fileRemove(fName):
     except OSError as e:
         if e.errno != 2:    ## 2 is the error number when no such file or directory is present https://docs.python.org/2/library/errno.html
             raise
-            
+# END
+
 
 def mergeRanges(ranges):
     """
@@ -609,11 +618,12 @@ def mergeRanges(ranges):
             max_value = i[1]
     out_range.append([min_value, max_value])
     return np.array(out_range)
-#END
+# END
+
 
 def subranges(r1, r2):
     """
-    Subtract range2 (r2) from range1 (r1) and return non-ooverllaping range.
+    Subtract range2 (r2) from range1 (r1) and return non-overlaping range.
     Both ranges are considered closed.
     """
     from collections import deque
@@ -658,7 +668,8 @@ def subranges(r1, r2):
             cr1 = [r2[j][1]+1, cr1[1]]
             j += 1
     return(outr)
-#END
+# END
+
 
 def total_size(o, handlers={}, verbose=False):
     try:
@@ -703,6 +714,7 @@ def total_size(o, handlers={}, verbose=False):
         return s
 
     return sizeof(o)
+# END
 
 
 def getScaf(args):
@@ -749,6 +761,8 @@ def getScaf(args):
         if key not in chrID:
             scafGenome.append(SeqRecord(seq=gen[key].seq, id = key, description=""))
     write(scafGenome,fout,"fasta")
+# END
+
 
 def seqsize(args):
     fin = args.fasta.name
@@ -758,7 +772,7 @@ def seqsize(args):
         print(i[0], i[1], sep="\t")
     if args.t:
         print("Genome_length", sum([i[1] for i in out]), sep="\t")
-#END
+# END
 
 
 def filsize(args):
@@ -771,7 +785,8 @@ def filsize(args):
     size= args.size
     gen = [fasta for fasta in parse(fin,'fasta') if len(fasta.seq) > size]
     write(gen, fin.split(".fna")[0].split("/")[-1]+".filtered.fna", "fasta")
-#END
+# END
+
 
 def basrat(args):
     from collections import Counter
@@ -786,7 +801,8 @@ def basrat(args):
                 outD[k] = cnt
     for k, v in outD.items():
         print(k, v, sep="\t")
-#END
+# END
+
 
 def getchr(args):
     fin = args.fasta.name
@@ -794,11 +810,18 @@ def getchr(args):
     elif args.chrs is not None and args.F is None: chroms = args.chrs
     else: raise Exception('InvalidValue: Incorrect value for chrs provided')
     out = args.o.name if args.o is not None else fin + ".filtered.fasta"
-    with open(out, 'w') as fout:
-        for chrom, seq in readfasta(fin).items():
-            if (chrom in chroms) != args.v:
-                fout.write(">" + chrom + "\n" + "\n".join([seq[i:i+60] for i in range(0, len(seq), 60)]) + '\n')
-#END
+    fa = readfasta(fin)
+    chrs = list(fa.keys())
+    for c in chrs:
+        if (c not in chroms) != args.v:
+            fa.pop(c)
+    writefasta(fa, out)
+    # with open(out, 'w') as fout:
+    #     for chrom, seq in .items():
+    #         if (chrom in chroms) != args.v:
+    #             fout.write(">" + chrom + "\n" + "\n".join([seq[i:i+60] for i in range(0, len(seq), 60)]) + '\n')
+# END
+
 
 def genome_ranges(args):
     import os
@@ -821,7 +844,8 @@ def genome_ranges(args):
             for i in range(len(r1)):
                 fout.write(start + str(id) + "\t" + str(r1[i]) + "\t" + str(r2[i]))
                 start = '\n'
-#END
+# END
+
 
 def get_homopoly(args):
     import os
@@ -847,7 +871,8 @@ def get_homopoly(args):
             for i in sorted(outdict.keys()):
                 fout.write(start + str(chrom) + "\t" + str(i+1 - args.p) + "\t" + str(outdict[i][0] + args.p) + "\t" + outdict[i][1])
                 start = '\n'
-#END
+# END
+
 
 def asstat(fin):
     from collections import deque
@@ -865,7 +890,8 @@ def asstat(fin):
     for i in range(len(fasta_len_cumsum)):
         if fasta_len_cumsum[i] > half:
             return [fasta_len_cumsum[-1], len(fasta_len), fasta_len[-1], fasta_len[0], fasta_len[i], len(fasta_len)-i]
-#END
+# END
+
 
 def getasstat(args):
     from collections import deque
@@ -891,45 +917,7 @@ def getasstat(args):
         fout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format("assemble_id", "assembly_length", "number_of_contig", "longest_contig", "shortest_contig", "N50", "L50"))
         for i in range(len(fins)):
             fout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(fins[i], n50_values[i][0], n50_values[i][1], n50_values[i][2], n50_values[i][3], n50_values[i][4], n50_values[i][5]))
-#END
-
-# def asstat(fin, parse):
-#     from numpy import cumsum
-#     fasta_len = deque()
-#     for fasta in parse(fin, 'fasta'):
-#         fasta_len.append(len(str(fasta.seq)))
-#     fasta_len = sorted(fasta_len)
-#     fasta_len_cumsum = cumsum(fasta_len)
-#     half = fasta_len_cumsum[-1]/2
-#     for i in range(len(fasta_len_cumsum)):
-#         if fasta_len_cumsum[i] > half:
-#             return [fasta_len_cumsum[-1], len(fasta_len), fasta_len[-1], fasta_len[0], fasta_len[i], len(fasta_len)-i]
-#
-#
-# def getasstat(args):
-#     out = args.o.name if args.o is not None else "genomes.n50"
-#     NC = args.n
-#     from collections import deque
-#     fins = deque()
-#     if args.F is None and args.G is None:
-#         sys.exit("1Provide genome file path in -F or -G")
-#     elif args.F is not None and args.G is not None:
-#         sys.exit("Provide genome file path in -F or -G")
-#     elif args.F is not None:
-#         with open(args.F.name, 'r') as F:
-#             for line in F:
-#                 fins.append(line.strip())
-#     elif args.G is not None:
-#         fins = args.G
-#     from multiprocessing import Pool
-#     from functools import partial
-#     from Bio.SeqIO import parse
-#     with Pool(processes=NC) as pool:
-#         n50_values = pool.map(partial(asstat, parse=parse), fins)
-#     with open(out, 'w') as fout:
-#         fout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format("assemble_id", "assembly_length", "number_of_contig", "longest_contig", "shortest_contig", "N50", "L50"))
-#         for i in range(len(fins)):
-#             fout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(fins[i], n50_values[i][0], n50_values[i][1], n50_values[i][2], n50_values[i][3], n50_values[i][4], n50_values[i][5]))
+# END
 
 
 def plthist(args):
@@ -1010,6 +998,7 @@ def plthist(args):
     plt.tight_layout()
     plt.savefig(args.o.name)
     fin.close()
+# END
 
 
 def gfftrans(args):
@@ -1026,6 +1015,7 @@ def gfftrans(args):
                 else:
                     trans[line[0] + '_' + line[3] + '_' + line[4]] = revcomp(fasta[line[0]][int(line[3])-1:int(line[4])-1])
     writefasta(trans, args.o.name)
+# END
 
 
 def vcfdp(args):
@@ -1044,7 +1034,8 @@ def vcfdp(args):
                     raise ValueError("DP and DP4 values are not present for {}".format('\t'.join(line)))
                     sys.exit()
                 fout.write('\t'.join([line[0], line[1], line[3], line[4], DP] + DP4) + '\n')
-                    
+# END
+
                         
 def gffsort(args):
     print('Required format of GFF file:\n')
@@ -1084,7 +1075,8 @@ def gffsort(args):
         for chr in sorted(list(geneids.keys())):
             for gid in sorted(geneids[chr].keys(), key = lambda x: geneids[chr][x]):
                 fout.write(gffdata[chr][gid])
-        
+# END
+
 
 def getcol(args):
     if args.s is None:
@@ -1113,6 +1105,7 @@ def getcol(args):
                     first = False
                     print('Select columns: {}'.format([line[i] for i in select]))
                 fout.write(args.s.join([line[i] for i in select]) + '\n')
+# END
 
 
 def bamcov(args):
@@ -1120,10 +1113,8 @@ def bamcov(args):
     import os
     from subprocess import Popen, PIPE
     import warnings
-
     formatwarning_orig = warnings.formatwarning
     warnings.formatwarning = lambda message, category, filename, lineno, line=None:    formatwarning_orig(message, category, filename, lineno, line='')
-
     BAM = args.bam.name
     OUT = args.out.name
     BED = args.r.name if args.r is not None else None
@@ -1132,7 +1123,6 @@ def bamcov(args):
     D = args.d
     if not os.path.isfile(BAM):
         sys.exit('BAM file is not found: {}'.format(BAM))
-
     # if not os.path.isfile(BED):
     #     sys.exit('BED file is not found: '.format(BED))
 
@@ -1141,7 +1131,6 @@ def bamcov(args):
     o = p.communicate()
     if o[1] != b'':
         sys.exit("Error in using samtools view to get BAM file header:\n{}".format(o[1].decode()))
-
     h = o[0].decode().strip().split("\n")
     chrlen = {}
     for line in h:
@@ -1154,8 +1143,6 @@ def bamcov(args):
         c = [x for x in line if 'SN' == x[:2]][0].split(':')[1]
         l = [x for x in line if 'LN' == x[:2]][0].split(':')[1]
         chrlen[c] = int(l)
-
-
     # Get read-depths
     tname = "TMP_" + os.path.basename(BAM) + ".txt"
     warnings.warn("Creating {} for saving the samtools depth output. Ensure enough storage space is available.".format(tname), stacklevel=-1)
@@ -1182,6 +1169,7 @@ def bamcov(args):
     # TODO: Add method to filter for BED regions
 # END
 
+
 def run_bam_readcount(tmp_com, outfile):
     from subprocess import Popen, PIPE
     with open(outfile, 'w') as TMP:
@@ -1189,6 +1177,7 @@ def run_bam_readcount(tmp_com, outfile):
     o = p.communicate()
     # if o[1] != b'Minimum mapping quality is set to 40':
     #     sys.exit("Error in running bam-readcount:\n{}".format(o[1].decode()))
+# END
 
 
 def pbamrc(args):
@@ -1258,6 +1247,7 @@ def pbamrc(args):
     for i in range(split_N):
         os.remove(str(pre)+'_'+str(i)+".bed")
         os.remove(str(pre)+'_'+str(i)+".rc")
+# END
 
 
 def run_ppileup(locs, out, bam, pars):
@@ -1267,6 +1257,7 @@ def run_ppileup(locs, out, bam, pars):
             # print("/srv/netscratch/dep_mercier/grp_schneeberger/bin/bin_manish/samtools mpileup {pars} -r {c}:{s}-{e} {bam}".format(pars=pars, c=loc[0], s=int(loc[1])+1, e=loc[2], bam=bam))
             p = Popen("/srv/netscratch/dep_mercier/grp_schneeberger/bin/bin_manish/samtools mpileup {pars} -r {c}:{s}-{e} {bam}".format(pars=pars, c=loc[0], s=int(loc[1])+1, e=loc[2], bam=bam).split(), stdout=fout, stderr=PIPE)
             o = p.communicate()
+# END
 
 
 def ppileup(args):
@@ -1303,7 +1294,8 @@ def ppileup(args):
         p = Popen("cat {outs} {OUT}".format(outs=' '.join(outs), OUT=OUT).split(), stdout=fout, stderr=PIPE)
     p.communicate()
     # [os.remove(o) for o in outs]
-#END
+# END
+
 
 def splitbam(args):
     BAM = args.bam.name
@@ -1320,7 +1312,6 @@ def splitbam(args):
     elif args.o == 'c': wex='.cram'
     else:
         raise ValueError("Incorrect output file type: {}".format(args.o))
-        sys.exit()
     b = pysam.AlignmentFile(BAM, rt)
     head = b.header
     # b = pysam.AlignmentFile('/srv/netscratch/dep_mercier/grp_schneeberger/projects/SynSearch/tests/tmp2.bam', rt)
@@ -1331,7 +1322,7 @@ def splitbam(args):
             rbc = read.get_tag(TAG)
         except KeyError:
             if perr:
-                print(TAG + " not found in {qname} at position {rname}:{rpos}. All reads without tag would be skipped.".format(qname=read.qname,rname= read.reference_name, rpos=read.reference_start))
+                print(TAG + " not found in {qname} at position {rname}:{rpos}. All reads without tag would be skipped.".format(qname=read.qname, rname=read.reference_name, rpos=read.reference_start))
                 perr = False
             continue
         if rbc == bc: bcreads.append(read)
@@ -1350,7 +1341,8 @@ def splitbam(args):
         with pysam.AlignmentFile(bc+wex, wt, header=b.head) as f:
             for r in bcreads:
                 f.write(r)
-#END
+# END
+
 
 def gfatofa(args):
     gfa = args.gfa.name
@@ -1364,18 +1356,110 @@ def gfatofa(args):
                 gendict[line[1]] = line[2]
     writefasta(gendict, fa)
     print("Finished")
-#END
+# END
+
+
+def sampfa(args):
+    """
+    parser_sampfa.set_defaults(func=sampfa)
+    parser_sampfa.add_argument("fa", help='Input fasta file', type=argparse.FileType('r'))
+    parser_sampfa.add_argument("-n", help='Number of regions to select', type=int, default=1)
+    parser_sampfa.add_argument("-s", help='Size of region to select', type=int, default=100)
+    parser_sampfa.add_argument("--chr", help='Chromosome from which the regions should be selected. Multiple chromosomes can be selected.', type=str, action='append')
+    parser_sampfa.add_argument("-v", help='Invert chromosome selection', action='store_true')
+    parser_sampfa.add_argument("-o", help='Output file name', type=argparse.FileType('w'))
+    """
+    n = args.n
+    s = int(args.s/2)
+    fin = args.fa.name
+    inchrs = args.chr
+    v = args.v
+    fout = args.o.name if args.o is not None else "selected_regions.fa"
+    if n < 1:
+        raise ValueError("n is too small")
+    if args.s < 1:
+        raise ValueError("s is too small")
+    import random
+    from collections import deque
+    fasta = readfasta(fin)
+    if inchrs is not None:
+        if not v:
+            select = inchrs
+        else:
+            select = list(set(fasta.keys()) - set(inchrs))
+        fasta = {k: v for k, v in fasta.items() if k in select}
+    chrsize = {k: len(v) for k, v in fasta.items()}
+    chrs = list(fasta.keys())
+    pos = deque()
+    for i in range(n):
+        c = random.choice(chrs)
+        p = random.randint(s, chrsize[c] - s - 1)
+        pos.append([c, p])
+    # For each position select the region to create fasta_dict
+    writefasta({f"{p[0]}_{p[1]-s}_{p[1]+s+1}": fasta[p[0]][(p[1]-s):(p[1]+s+1)] for p in pos}, fout)
+    return
+# END
+
+
+def faline(args):
+    from collections import deque
+    # parser_faline.set_defaults(func=faline)
+    # parser_faline.add_argument("input", help='Input fasta file', type=argparse.FileType('r'))
+    # parser_sampfa.add_argument("-o", help='Output fasta file', argparse.FileType('w'))
+    # parser_sampfa.add_argument("-i", help='Change input fasta file inplace', actions="store_true")
+    # parser_sampfa.add_argument("-s", help='Length of the sequence line. Use -1 for single line fasta.', type=int, default=60)
+
+    input = args.input.name
+    if args.o is not None and args.i is True:
+        raise ValueError("Use either -o or -i. Exiting.")
+    if args.o is None and args.i is False:
+        raise ValueError("Use either -o or -i. Exiting.")
+    if args.o == args.input.name:
+        raise ValueError("Same filename for input and output file. Use -i instead. Exiting.")
+    if args.o is not None:
+        out = args.o
+    else:
+        out = randomstring(10) + ".fa"
+
+    s = args.s
+    # TODO: See if this can work with zipped files as well
+    seq = deque()
+    with open(input, 'r') as fin:
+        with open(out, 'w') as fout:
+            for line in fin:
+                if '>' == line[0]:
+                    if len(seq) == 0:
+                        fout.write(line)
+                    else:
+                        seq = ''.join(seq)
+                        if s == -1:
+                            fout.write(seq + '\n')
+                        else:
+                            fout.write('\n'.join([seq[i:i+s] for i in range(0, len(seq), s)]) + '\n')
+                        fout.write(line)
+                        seq = deque()
+                else:
+                    seq.append(line.strip())
+            seq = ''.join(seq)
+            if s == -1:
+                fout.write(seq + '\n')
+            else:
+                fout.write('\n'.join([seq[i:i+s] for i in range(0, len(seq), s)]) + '\n')
+    if args.i:
+        os.rename(out, input)
+# END
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     subparsers = parser.add_subparsers()
-    parser_getchr  = subparsers.add_parser("getchr", help="Get specific chromosomes from the fasta file")
-    parser_exseq   = subparsers.add_parser("exseq", help="extract sequence from fasta", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_getscaf = subparsers.add_parser("getscaf", help="generate scaffolds from a given genome")
-    parser_seqsize = subparsers.add_parser("seqsize", help="get size of dna sequences in a fasta file")
-    parser_filsize = subparsers.add_parser("filsize", help="filter out smaller molecules")
-    parser_subnuc  = subparsers.add_parser("subnuc", help="Change character (in all sequences) in the fasta file")
-    parser_basrat  = subparsers.add_parser("basrat", help="Calculate the ratio of every base in the genome")
+    parser_getchr  = subparsers.add_parser("getchr", help="Get specific chromosomes from the fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_sampfa  = subparsers.add_parser("sampfa", help="Sample random sequences from a fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_exseq = subparsers.add_parser("exseq", help="extract sequence from fasta", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_getscaf = subparsers.add_parser("getscaf", help="generate scaffolds from a given genome", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_seqsize = subparsers.add_parser("seqsize", help="get size of dna sequences in a fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_filsize = subparsers.add_parser("filsize", help="filter out smaller molecules", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_subnuc = subparsers.add_parser("subnuc", help="Change character (in all sequences) in the fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_basrat = subparsers.add_parser("basrat", help="Calculate the ratio of every base in the genome", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_genome_ranges = subparsers.add_parser("genome_ranges", help="Get a list of genomic ranges of a given size", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_get_homopoly = subparsers.add_parser("get_homopoly", help="Find homopolymeric regions in a given fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_n50 = subparsers.add_parser("asstat", help="Get N50 values for the given list of chromosomes", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -1391,12 +1475,29 @@ if __name__ == '__main__':
     parser_splitbam = subparsers.add_parser("splitbam", help="Split a BAM files based on TAG value. BAM file must be sorted using the TAG.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # TODO: Add functionality for sampling rows
     parser_samplerow = subparsers.add_parser("smprow", help="Select random rows from a text file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    #
     parser_gfatofa = subparsers.add_parser("gfatofa", help="Convert a gfa file to a fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_faline = subparsers.add_parser("faline", help="Convert fasta file from single line to multi line or vice-versa", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
+
+
+    # faline
+    parser_faline.set_defaults(func=faline)
+    parser_faline.add_argument("input", help='Input fasta file', type=argparse.FileType('r'))
+    parser_faline.add_argument("-o", help='Output fasta file', type=str)
+    parser_faline.add_argument("-i", help='Change input fasta file inplace', action="store_true")
+    parser_faline.add_argument("-s", help='Length of the sequence line. Use -1 for single line fasta.', type=int, default=60)
+
+    # sampfa
+    parser_sampfa.set_defaults(func=sampfa)
+    parser_sampfa.add_argument("fa", help='Input fasta file', type=argparse.FileType('r'))
+    parser_sampfa.add_argument("-n", help='Number of regions to select', type=int, default=1)
+    parser_sampfa.add_argument("-s", help='Size of region to select', type=int, default=100)
+    parser_sampfa.add_argument("--chr", help='Chromosome from which the regions should be selected. Multiple chromosomes can be selected.', type=str, action='append')
+    parser_sampfa.add_argument("-v", help='Invert chromosome selection', default=False, action='store_true')
+    parser_sampfa.add_argument("-o", help='Output file name', type=argparse.FileType('w'))
 
     # gfatofa
     parser_gfatofa.set_defaults(func=gfatofa)
@@ -1514,8 +1615,8 @@ if __name__ == '__main__':
     parser_exseq.set_defaults(func=extractSeq)
     parser_exseq.add_argument("fasta", help="fasta file", type=argparse.FileType('r'))
     parser_exseq.add_argument("--chr", help="Chromosome ID", type=str)
-    parser_exseq.add_argument("-start", help="Start location", type=int)
-    parser_exseq.add_argument("-end", help="End location", type=int)
+    parser_exseq.add_argument("-start", help="Start location (BED format, 0-base, end included)", type=int)
+    parser_exseq.add_argument("-end", help="End location (BED format, 0-base, end excluded)", type=int)
     parser_exseq.add_argument("--fin", help="File containing locations to extract (BED format)", type=argparse.FileType('r'))
     parser_exseq.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default=None)
     
@@ -1541,6 +1642,7 @@ if __name__ == '__main__':
     
     parser_basrat.set_defaults(func=basrat)
     parser_basrat.add_argument("fasta", help="genome fasta file", type=argparse.FileType('r'))
+
     
     args = parser.parse_args()
 
@@ -1551,6 +1653,6 @@ if __name__ == '__main__':
     from collections import deque
 
 
-#    print(args)
+    # print(args)
     args.func(args)
 
