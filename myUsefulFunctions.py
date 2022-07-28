@@ -14,6 +14,7 @@ import argparse
 import os
 import sys
 
+from classes import Cigar
 class Namespace:
     """
     Use this to create args object for parsing to functions
@@ -23,6 +24,126 @@ class Namespace:
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
 # END
+inttr = lambda x: [int(x[0]), x[1]]
+
+############################# FASTA ############################################
+def readfasta(f):
+    # TODO: This takes too long when used with getchr for large genomes. Try to optimise FASTA reading when the entire genome is not needed.
+    from gzip import open as gzopen
+    from gzip import BadGzipFile
+    from collections import deque
+    import sys
+    out = {}
+    chrid = ''
+    chrseq = deque()
+    # Test if the file is Gzipped or not
+    with gzopen(f, 'rb') as fin:
+        try:
+            fin.read(1)
+            isgzip = True
+        except BadGzipFile:
+            isgzip = False
+    try:
+        if isgzip:
+            with gzopen(f, 'rb') as fin:
+                for line in fin:
+                    if b'>' in line:
+                        if chrid != '':
+                            out[chrid] = ''.join(chrseq)
+                            chrid = line.strip().split(b'>')[1].split(b' ')[0].decode()
+                            chrseq = deque()
+                        else:
+                            chrid = line.strip().split(b'>')[1].split(b' ')[0].decode()
+                        if chrid in out.keys():
+                            sys.exit(" Duplicate chromosome IDs are not accepted. Chromosome ID {} is duplicated. Provided chromosome with unique IDs".format(chrid))
+                    else:
+                        chrseq.append(line.strip().decode())
+        else:
+            with open(f, 'r') as fin:
+                for line in fin:
+                    if '>' in line:
+                        if chrid != '':
+                            out[chrid] = ''.join(chrseq)
+                            chrid = line.strip().split('>')[1].split(' ')[0]
+                            chrseq = deque()
+                        else:
+                            chrid = line.strip().split('>')[1].split(' ')[0]
+                        if chrid in out.keys():
+                            sys.exit(" Duplicate chromosome IDs are not accepted. Chromosome ID {} is duplicated. Provided chromosome with unique IDs".format(chrid))
+                    else:
+                        chrseq.append(line.strip())
+    except Exception as e:
+        raise Exception(e)
+
+    if chrid != '':
+        out[chrid] = ''.join(chrseq)
+    # TODO: add check for the validation of input fasta files
+    return out
+# END
+
+
+def writefasta(fa, f):
+    """
+    :param fa: dictionary. Keys are chromosome ids. Values are sequence.
+    :param f: Output file
+    :return:
+    Can output .gz file if output file name ends with .gz
+    """
+    # TODO: write bgzip file
+    # from pysam import tabix_compress as gzopen
+    from gzip import open as gzopen
+    isgzip = f.rsplit('.', 1)[-1] == 'gz'
+    # b, nl >> Begin character, new line
+    op, openstr, b, nl = (gzopen, 'wb', b'>', b'\n') if isgzip else (open, 'w', '>', '\n')
+    with op(f, openstr) as fo:
+        for k, v in fa.items():
+            if isgzip:
+                k = k.encode()
+                v = v.encode()
+            fo.write(b+k+nl)
+            fo.write(nl.join([v[i:i+60] for i in range(0, len(v), 60)]) + nl)
+            # for i in range(0, len(v), 60):
+            #     fo.write(v[i:(i+60)]+nl)
+# END
+
+
+def readfasta_iterator(fin):
+    # TODO: Extend this to
+    from collections import deque
+    title = ''
+    seq = deque()
+    for line in fin:
+        if line.strip() == '': continue
+        if line[0] == '>':
+            if title == '':
+                title = line[1:].rstrip().split(' ')[0]
+            else:
+                yield title, ''.join(seq)
+                seq = deque()
+                title = line[1:].rstrip().split(' ')[0]
+        else:
+            seq.append(line.strip())
+    yield title, ''.join(seq)
+# END
+
+def readfaidxbed(f):
+    """
+    Reads .faidx file from a genome assembly and returns a BED file consisting
+    for entire chromosomes
+    """
+    from collections import deque
+    import pybedtools as bt
+    fabed = deque()
+    with open(f, 'r') as fin:
+        for line in fin:
+            line = line.strip().split()
+            fabed.append([line[0], 1, int(line[1])])
+    return list(fabed)
+# END
+
+
+############################# Other ############################################
+
 
 def randomstring(l):
     """
@@ -135,13 +256,16 @@ class snvdata:
 # END
 
 
-def cgtpl(cg):
+def cgtpl(cg, to_int=False):
     """
     Takes a cigar string as input and returns a cigar tuple
     """
     for i in "MIDNSHPX=":
         cg = cg.replace(i, ';'+i+',')
-    return [i.split(';') for i in cg.split(',')[:-1]]
+    if to_int:
+        return [inttr(i.split(';')) for i in cg.split(',')[:-1]]
+    else:
+        return [i.split(';') for i in cg.split(',')[:-1]]
 # END
 
 
@@ -159,6 +283,30 @@ def cggenlen(cg, gen):
     s = set(['M', 'D', 'N', '=', 'X']) if gen == 'r' else set(['M', 'I', 'S', '=', 'X'])
     l = sum([int(i[0]) for i in cg if i[1] in s])
     return l
+# END
+
+
+def cgwalk(cg, n, ngen='r'):
+    """
+    Returns how many bases would be travelled in the non-focal genome after moving n bases in the focal (ngen) genome. 
+    """
+    cnt = 0                   # Count in the focal genome
+    ocnt = 0                  # Count in the other genome
+    nset = set(['M', 'D', 'N', '=', 'X']) if ngen == 'r' else set(['M', 'I', 'S', '=', 'X'])
+    oset = set(['M', 'I', 'S', '=', 'X']) if ngen == 'r' else set(['M', 'D', 'N', '=', 'X'])
+    for c in cg:
+        if c[1] in {'H', 'P'}: continue
+        if c[1] in nset:
+            if n <= cnt + c[0]:
+                if c[1] in {'M', '=', 'X'}:
+                    return ocnt + (n - cnt)
+                elif c[1] in {'I', 'D', 'S', 'N'}:
+                    return ocnt                
+            else:
+                cnt += c[0]
+        if c[1] in oset:
+            ocnt += c[0]
+    raise ValueError("n is larger than the number of based covered by cigartuple")
 # END
 
 
@@ -392,86 +540,6 @@ def readblast(f):
 # END
 
 
-def readfasta(f):
-    # TODO: This takes too long when used with getchr for large genomes. Try to optimise FASTA reading when the entire genome is not needed.
-    from gzip import open as gzopen
-    from gzip import BadGzipFile
-    from collections import deque
-    import sys
-    out = {}
-    chrid = ''
-    chrseq = deque()
-    # Test if the file is Gzipped or not
-    with gzopen(f, 'rb') as fin:
-        try:
-            fin.read(1)
-            isgzip = True
-        except BadGzipFile:
-            isgzip = False
-    try:
-        if isgzip:
-            with gzopen(f, 'rb') as fin:
-                for line in fin:
-                    if b'>' in line:
-                        if chrid != '':
-                            out[chrid] = ''.join(chrseq)
-                            chrid = line.strip().split(b'>')[1].split(b' ')[0].decode()
-                            chrseq = deque()
-                        else:
-                            chrid = line.strip().split(b'>')[1].split(b' ')[0].decode()
-                        if chrid in out.keys():
-                            sys.exit(" Duplicate chromosome IDs are not accepted. Chromosome ID {} is duplicated. Provided chromosome with unique IDs".format(chrid))
-                    else:
-                        chrseq.append(line.strip().decode())
-        else:
-            with open(f, 'r') as fin:
-                for line in fin:
-                    if '>' in line:
-                        if chrid != '':
-                            out[chrid] = ''.join(chrseq)
-                            chrid = line.strip().split('>')[1].split(' ')[0]
-                            chrseq = deque()
-                        else:
-                            chrid = line.strip().split('>')[1].split(' ')[0]
-                        if chrid in out.keys():
-                            sys.exit(" Duplicate chromosome IDs are not accepted. Chromosome ID {} is duplicated. Provided chromosome with unique IDs".format(chrid))
-                    else:
-                        chrseq.append(line.strip())
-    except Exception as e:
-        raise Exception(e)
-
-    if chrid != '':
-        out[chrid] = ''.join(chrseq)
-    # TODO: add check for the validation of input fasta files
-    return out
-# END
-
-
-def writefasta(fa, f):
-    """
-    :param fa: dictionary. Keys are chromosome ids. Values are sequence.
-    :param f: Output file
-    :return:
-    Can output .gz file if output file name ends with .gz
-    """
-    # TODO: write bgzip file
-    # from pysam import tabix_compress as gzopen
-    from gzip import open as gzopen
-    isgzip = f.rsplit('.', 1)[-1] == 'gz'
-    # b, nl >> Begin character, new line
-    op, openstr, b, nl = (gzopen, 'wb', b'>', b'\n') if isgzip else (open, 'w', '>', '\n')
-    with op(f, openstr) as fo:
-        for k, v in fa.items():
-            if isgzip:
-                k = k.encode()
-                v = v.encode()
-            fo.write(b+k+nl)
-            fo.write(nl.join([v[i:i+60] for i in range(0, len(v), 60)]) + nl)
-            # for i in range(0, len(v), 60):
-            #     fo.write(v[i:(i+60)]+nl)
-# END
-
-
 def density_scatter(x, y, ax=None, fig=None, sort=True, bins=20, **kwargs):
     import numpy as np
     import matplotlib.pyplot as plt
@@ -672,6 +740,9 @@ def subranges(r1, r2):
 
 
 def total_size(o, handlers={}, verbose=False):
+    from collections import deque
+    from sys import getsizeof
+    from itertools import chain
     try:
         from reprlib import repr
     except ImportError as e :
@@ -753,7 +824,7 @@ def getScaf(args):
         pos = coord[1]
     
     if np.random.randint(0, rev, 1):
-        scafGenome.append(SeqRecord(seq=gen[cid][pos:chromLen[cid]].seq.reverse_complement(), id = cid+"_"+str(chromLen[cid])+"_r", description=""))
+        scafGenome.append(SeqRecord(seq=gen[cid][pos:chromLen[cid]].seq.reverse_complement(), id=cid+"_"+str(chromLen[cid])+"_r", description=""))
     else:
         scafGenome.append(SeqRecord(seq=gen[cid][pos:chromLen[cid]].seq, id = cid+"_"+str(chromLen[cid]), description=""))
     
@@ -1113,18 +1184,22 @@ def bamcov(args):
     import os
     from subprocess import Popen, PIPE
     import warnings
+    import numpy as np
     formatwarning_orig = warnings.formatwarning
     warnings.formatwarning = lambda message, category, filename, lineno, line=None:    formatwarning_orig(message, category, filename, lineno, line='')
     BAM = args.bam.name
     OUT = args.out.name
     BED = args.r.name if args.r is not None else None
-    if BED is not None:
-        sys.exit("SELECTING REGIONS (-R) HAS NOT BEEN IMPLEMENTED YET. PLEASE DO NOT USE IT.")
+    # if BED is not None:
+    #     sys.exit("SELECTING REGIONS (-R) HAS NOT BEEN IMPLEMENTED YET. PLEASE DO NOT USE IT.")
     D = args.d
     if not os.path.isfile(BAM):
         sys.exit('BAM file is not found: {}'.format(BAM))
-    # if not os.path.isfile(BED):
-    #     sys.exit('BED file is not found: '.format(BED))
+    if not os.path.isfile(BED):
+        sys.exit('BED file is not found: '.format(BED))
+    else:
+        # Update samtools depth command to include the BED file as well
+        D += f" -b {BED}"
 
     # Get chromosome names and lengths
     p = Popen("samtools view -H {}".format(BAM).split(), stdout=PIPE, stderr=PIPE)
@@ -1133,16 +1208,38 @@ def bamcov(args):
         sys.exit("Error in using samtools view to get BAM file header:\n{}".format(o[1].decode()))
     h = o[0].decode().strip().split("\n")
     chrlen = {}
-    for line in h:
-        line = line.strip().split()
-        if line[0] != '@SQ': continue
-        if not any(['SN' in x for x in line]):
-            sys.exit('SN tag not present in header: {}'.format(' '.join(line)))
-        if not any(['LN' in x for x in line]):
-            sys.exit('LN tag not present in header: {}'.format(' '.join(line)))
-        c = [x for x in line if 'SN' == x[:2]][0].split(':')[1]
-        l = [x for x in line if 'LN' == x[:2]][0].split(':')[1]
-        chrlen[c] = int(l)
+    if not BED:
+        for line in h:
+            line = line.strip().split()
+            if line[0] != '@SQ': continue
+            if not any(['SN' in x for x in line]):
+                sys.exit('SN tag not present in header: {}'.format(' '.join(line)))
+            if not any(['LN' in x for x in line]):
+                sys.exit('LN tag not present in header: {}'.format(' '.join(line)))
+            c = [x for x in line if 'SN' == x[:2]][0].split(':')[1]
+            l = [x for x in line if 'LN' == x[:2]][0].split(':')[1]
+            chrlen[c] = int(l)
+    else:
+        chrrange = deque()
+        chrom = ''
+        with open(BED, 'r') as fin:
+            for line in fin:
+                line = line.strip().split()
+                if line[0] != chrom:
+                    if chrom != '':
+                        chrrange = mergeRanges(np.array(chrrange))
+                        chrlen[chrom] = np.sum(chrrange[:, 1] - chrrange[:, 0] + 1)
+                        chrom = line[0]
+                        chrrange = deque([[int(line[1]), int(line[2])]])
+                    else:
+                        chrom = line[0]
+                        chrrange = deque([[int(line[1]), int(line[2])]])
+                else:
+                    chrrange.append([int(line[1]), int(line[2])])
+            chrrange = mergeRanges(np.array(chrrange))
+            chrlen[chrom] = np.sum(chrrange[:, 1] - chrrange[:, 0] + 1)
+
+
     # Get read-depths
     tname = "TMP_" + os.path.basename(BAM) + ".txt"
     warnings.warn("Creating {} for saving the samtools depth output. Ensure enough storage space is available.".format(tname), stacklevel=-1)
@@ -1403,12 +1500,6 @@ def sampfa(args):
 
 def faline(args):
     from collections import deque
-    # parser_faline.set_defaults(func=faline)
-    # parser_faline.add_argument("input", help='Input fasta file', type=argparse.FileType('r'))
-    # parser_sampfa.add_argument("-o", help='Output fasta file', argparse.FileType('w'))
-    # parser_sampfa.add_argument("-i", help='Change input fasta file inplace', actions="store_true")
-    # parser_sampfa.add_argument("-s", help='Length of the sequence line. Use -1 for single line fasta.', type=int, default=60)
-
     input = args.input.name
     if args.o is not None and args.i is True:
         raise ValueError("Use either -o or -i. Exiting.")
@@ -1420,7 +1511,6 @@ def faline(args):
         out = args.o
     else:
         out = randomstring(10) + ".fa"
-
     s = args.s
     # TODO: See if this can work with zipped files as well
     seq = deque()
@@ -1448,6 +1538,171 @@ def faline(args):
     if args.i:
         os.rename(out, input)
 # END
+
+
+def shannon_seq(seq):
+    from collections import deque, Counter
+    from math import log
+    freq = Counter(seq)
+    return round(sum([-1*(freq[b]/len(seq))*(log(freq[b]/len(seq))) for b in {'A', 'C', 'G', 'T'} if b in freq]), 2)
+# END
+
+
+def shannon(args):
+    fasta = args.fasta.name
+    output = args.output.name
+    window = args.w
+    size = args.s
+    t = args.t
+    if size > window:
+        raise ValueError("Step size cannot be more than window size. Exiting.")
+    from multiprocessing import Pool
+    import os
+    os.environ['OPENBLAS_NUM_THREADS'] = '1'
+    import numpy as np
+    shannon_values = {}
+    for chrom, s in readfasta_iterator(open(fasta, 'r')):
+        print(chrom)
+        l = len(s)
+        seq = [s[i:(i+window)] for i in range(0, l, size)]
+        with Pool(processes=t) as pool:
+            shannons = pool.map(shannon_seq, seq)
+        shannon_values[chrom] = dict(zip(range(0, l, size), shannons))
+    with open(output, 'w') as fout:
+        for k, v in shannon_values.items():
+            for p, sv in v.items():
+                fout.write(f"{k}\t{p}\t{p+window}\t{sv}\n")
+    return f"Finished calculting shannon index. Output saved in {output}."
+# END
+
+
+def asmreads(args):
+    """
+    Print reads that constitute the assembly graph at the given position
+    """
+    try:
+        c = args.pos.split(':')[0]
+        s, e = map(int, args.pos.split(':')[1].split('-'))
+    except Exception as e:
+        raise Exception
+    gfa = args.gfa.name
+    agp = args.agp.name if args.agp is not None else None
+    def getcontig(agp, c, s, e):
+        """
+        Reads AGP and select contig overlapping the given position
+        """
+        with open(agp, 'r') as fin:
+            for line in fin:
+                if line[0] == '#': continue
+                line = line.strip().split()
+                if line[0] != c: continue
+                if line[4] != 'W': continue
+                if int(line[1]) <= s and e <= int(line[2]):
+                    if line[8] != '-':
+                        return line[5], s - int(line[1]) + 1, e - int(line[1]) + 1
+                    else:
+                        return line[5], int(line[7]) - (e - int(line[1])), int(line[7]) - (s - int(line[1]))
+        return None
+    # END
+    def getreads(gfa, c, s, e):
+        from collections import deque
+        reads = deque()
+        with open(gfa, 'r') as fin:
+            cfnd = False
+            sfnd = False
+            for line in fin:
+                if line[0] == 'S': continue
+                line = line.strip().split()
+                if line[1] != c:
+                    if not cfnd: continue
+                    else: break
+                cfnd = True
+                if (s > int(line[2]) + int(line[6])) or (e < int(line[2])):
+                    if not sfnd: continue
+                    else: break
+                sfnd = True
+                reads.append(line[4])
+        return reads
+    # END
+
+    if agp is not None: contig, start, end = getcontig(agp, c, s, e)
+    if contig is None:
+        raise ValueError("Input genomic coordinates overlap more than 1 contig or overlap a gap. This case cannot be handled currently. Provide smaller input coordinate.")
+    for r in getreads(gfa, contig, start, end):
+        print(r)
+# END
+
+
+def reg_str_to_list(regstr):
+    """
+    Converts region string ("contig:start-end") to region tuple. Follow same
+    standard as pysam: https://pysam.readthedocs.io/en/latest/glossary.html#term-region
+    
+    Here, regions in string format are 1-based closed regions, whereas regions in
+    tuple format would be 0-based half open.
+    
+    Example: Chr1:15001-20000 would become (Chr1, 15000, 20000).
+    Explanation:
+        * 15001 becomes 15000 because 1-based get converted to 0-based.
+        * 20000 would become 19999 for 0-based and since it is open at the end, next position (i.e. would be used in the region)
+    """
+    try:
+        c, p = regstr.split(':')
+        s, e = map(int, p.split('-'))
+    except Exception as e:
+        raise Exception(e)
+    if s < 1 or e < 1:
+        raise ValueError('start and end should be more than 0')
+    if s > e:
+        raise ValueError('start cannot be more than end')
+    return [c, s-1, e]    
+# END
+
+
+def mapbp(args):
+    """
+    Outputs mapping positions for the given reference genome coordinate
+    """
+    import pysam
+    from collections import defaultdict, deque
+    from classes import Cigar
+
+    def getsyripos(sout, pos):
+        """
+        :param: sout = syri output file (sorted and tabix indexed) handler (type: pysam.libctabix.TabixFile)
+        :param: pos = reference genome coordinate in (chrom, start, end) format 
+        """
+        return [b.split('\t') for b in sout.fetch(*pos)]
+    # END 
+
+    sfin = args.anno.name if args.anno is not None else None           # input syri.out file
+    hassfin = True if sfin is not None else False
+    mapfin = args.map.name
+    pos = reg_str_to_list(args.pos)
+    pos[2] = pos[2] + 1                 # Edit end coordinate to make it suitable for working with syri.out file. Need to be done because syri.out is not in BED format as expected by pysam
+    # if syri output is provided, select alignments selected by syri
+    if hassfin:
+        qryreg = defaultdict(deque)
+        sout = pysam.TabixFile(sfin)
+        poso = getsyripos(sout, pos)    # Positions overlapping
+        for p in poso:
+            if 'AL' in p[10]:
+                qryreg[p[5]].append([int(p[6]), int(p[7])])
+    bam = pysam.AlignmentFile(mapfin)
+    for al in bam.fetch(*pos):
+        # break
+        qs = al.qstart + (al.cigartuples[0][1] if al.cigartuples[0][0] in {4, 5} else 0) + 1
+        qe = qs + al.qlen - 1
+        if hassfin:
+            if al.query_name not in qryreg:
+                continue
+            if [qs, qe] not in qryreg[al.reference_name]:
+                continue
+        n = pos[2] - 1 - al.reference_start
+        p = qs + cgwalk(cgtpl(al.cigarstring, to_int=True), n) - 1
+        print(f"{al.query_name}:{p}-{p}")
+# END
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Collections of command-line functions to perform common pre-processing and analysis functions.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -1477,11 +1732,36 @@ if __name__ == '__main__':
     parser_samplerow = subparsers.add_parser("smprow", help="Select random rows from a text file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_gfatofa = subparsers.add_parser("gfatofa", help="Convert a gfa file to a fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_faline = subparsers.add_parser("faline", help="Convert fasta file from single line to multi line or vice-versa", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_shannon = subparsers.add_parser("shannon", help="Get Shanon entropy across the length of the chromosomes using sliding windows", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_asmreads = subparsers.add_parser("asmreads", help="For a given genomic region, get reads that constitute the corresponding assembly graph", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_mapbp = subparsers.add_parser("mapbp", help="For a given reference coordinate get the corresponding base and position in the reads/segments mapping the reference position", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
 
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
 
+    # mapbp
+    parser_mapbp.set_defaults(func=mapbp)
+    parser_mapbp.add_argument("pos", help='Genome position in \'chr:start-end\' format.', type=str)
+    parser_mapbp.add_argument("map", help='Alignment file in BAM/PAF format.', type=argparse.FileType('r'))
+    parser_mapbp.add_argument("--anno", help='Syri annotation file. Only alignments present in the syri output would be selected. Need indexed with tabix.', type=argparse.FileType('r'))
+
+
+    # asmreads
+    parser_asmreads.set_defaults(func=asmreads)
+    parser_asmreads.add_argument("pos", help='Genome position in \'chr:start-end\' format.', type=str)
+    parser_asmreads.add_argument("gfa", help='GFA file consisting of contigs and reads (https://github.com/GFA-spec/GFA-spec/blob/master/GFA2.md)', type=argparse.FileType('r'))
+    parser_asmreads.add_argument("--agp", help='For scaffolded assembly, AGP file containing information on contig order and orientation (https://www.ncbi.nlm.nih.gov/assembly/agp/AGP_Specification/).', type=argparse.FileType('r'))
+
+    # shanon
+    parser_shannon.set_defaults(func=shannon)
+    parser_shannon.add_argument("fasta", help='Input fasta file', type=argparse.FileType('r'))
+    parser_shannon.add_argument("output", help='Output file', type=argparse.FileType('w'))
+    parser_shannon.add_argument("-w", help='Window size', type=int, default=10000)
+    parser_shannon.add_argument("-s", help='Step size', type=int, default=1000)
+    # parser_shannon.add_argument("-p", help='Use canonical probabilities (0.25) for the occurence of a base. Default is to calculate probability from the sequence substring.', action='strore_true')
+    parser_shannon.add_argument("-t", help='Number of threads to use.', type=int, default=1)
 
     # faline
     parser_faline.set_defaults(func=faline)
