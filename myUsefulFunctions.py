@@ -144,117 +144,7 @@ def readfaidxbed(f):
 
 ############################# Other ############################################
 
-
-def randomstring(l):
-    """
-    l = length of the string
-    returns a random string of size l
-    """
-    from random import choices
-    from string import ascii_letters as letters
-    return ''.join(choices(letters, k=l))
-# END
-
-
-class snvdata:
-    """
-    Class to store pileup data. Reads the first six mandatory columns and stores them.
-    Each line is an object.
-    For reading extra column, use the setattr function
-    """
-
-    def __init__(self, ls):
-        self.chr = ls[0]
-        self.pos = int(ls[1])
-        self.ref = ls[2]
-        self.rc  = int(ls[3])
-        self.indelcount, self.bases = [0, []] if self.rc == 0 else self._getbases(ls[4])
-        if len(self.bases) != self.rc:
-            raise Exception('Number of identified bases if not equals to read count for {}:{}. ReadCount: {}, BaseCount: {}'.format(self.chr, self.pos, self.rc, len(self.bases)))
-        self.BQ = [ord(c) - 33 for c in ls[5]]
-
-    def _getbases(self, l):
-        from collections import deque
-        indelcount = 0
-        bases = deque()
-        skip = 0
-        indel = False
-        for c in l:
-            if skip > 0 and indel == False:
-                skip -= 1
-                continue
-            if indel == True:
-                if c in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']:
-                    skip = (skip*10) + int(c)
-                    continue
-                # skip = int(c)
-                else:
-                    indel = False
-                    skip -= 1
-                    continue
-            if c == '*':
-                # self.indelcount += 1
-                # indelcount += 1
-                bases.append(c)
-                continue
-            if c == '$': continue
-            if c in ['<', '>']: sys.exit('spliced alignment found')
-            if c == '^':
-                skip = 1
-                continue
-            if c in ['+', '-']:
-                indel = True
-                indelcount += 1
-                continue
-            bases.append(c)
-        return [indelcount, list(bases)]
-
-    def forwardcnt(self):
-        try:
-            return self.fcnt
-        except AttributeError as e:
-            self.fcnt = len([1 for i in self.bases if i in ['.', 'A', 'C', 'G', 'T']])
-            self.rcnt = self.rc - self.fcnt
-            return self.fcnt
-
-    def reversecnt(self):
-        try:
-            return self.rcnt
-        except AttributeError as e:
-            self.rcnt = len([1 for i in self.bases if i in [',', 'a', 'c', 'g', 't']])
-            self.fcnt = self.rc - self.rcnt
-            return self.rcnt
-
-    def basecnt(self, base):
-        return len([1 for i in self.bases if i == base])
-
-    def getBQ(self, base):
-        return [self.BQ[i] for i in range(len(self.bases)) if self.bases[i] == base]
-
-    def getindelreads(self, bases, reads):
-        from collections import deque
-        self.indelreads = deque()
-        reads = reads.split(",")
-        for i in range(len(reads)):
-            if bases[0] == '^':
-                bases == bases[3:]
-                continue
-            if bases[0] == '$':
-                bases = bases[1:]
-            if len(bases) == 1:
-                continue
-            if bases[1] not in ['+', '-']:
-                bases = bases[1:]
-            else:
-                self.indelreads.append(reads[i])
-                bases = bases[2:]
-                skip = 0
-                while bases[0] in {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'}:
-                    skip = (skip*10) + int(bases[0])
-                    bases = bases[1:]
-                bases = bases[skip:]
-# END
-
+############################# CIGAR ############################################
 
 def cgtpl(cg, to_int=False):
     """
@@ -301,12 +191,103 @@ def cgwalk(cg, n, ngen='r'):
                 if c[1] in {'M', '=', 'X'}:
                     return ocnt + (n - cnt)
                 elif c[1] in {'I', 'D', 'S', 'N'}:
-                    return ocnt                
+                    return ocnt
             else:
                 cnt += c[0]
         if c[1] in oset:
             ocnt += c[0]
     raise ValueError("n is larger than the number of based covered by cigartuple")
+# END
+
+############################# UTIL #############################################
+def randomstring(l):
+    """
+    l = length of the string
+    returns a random string of size l
+    """
+    from random import choices
+    from string import ascii_letters as letters
+    return ''.join(choices(letters, k=l))
+# END
+
+
+def mergeRanges(ranges):
+    """
+    Take a 2D numpy array, with each row as a range and return merged ranges
+    i.e. ranges which are overlapping would be combined.
+    :param ranges:
+    :return:
+    """
+    from collections import deque
+    import numpy as np
+    if len(ranges) < 2:
+        return ranges
+    for i in ranges:
+        if i[0] > i[1]:
+            i[1], i[0] = i[0], i[1]
+    ranges = ranges[ranges[:, 0].argsort()]
+    min_value = ranges[0, 0]
+    max_value = ranges[0, 1]
+    out_range = deque()
+    for i in ranges[1:]:
+        if i[0] > max_value:
+            out_range.append([min_value, max_value])
+            min_value = i[0]
+            max_value = i[1]
+        elif i[1] > max_value:
+            max_value = i[1]
+    out_range.append([min_value, max_value])
+    return np.array(out_range)
+# END
+
+
+def subranges(r1, r2):
+    """
+    Subtract range2 (r2) from range1 (r1) and return non-overlaping range.
+    Both ranges are considered closed.
+    """
+    from collections import deque
+    import numpy as np
+    # Get sorted and merged ranges.
+    r1 = mergeRanges(np.array(r1))
+    r2 = mergeRanges(np.array(r2))
+    i = 0
+    j = 0
+    lr1 = len(r1)
+    lr2 = len(r2)
+    cr1 = r1[i]
+    outr = deque()
+    f = False
+    while True:
+        if i == lr1: break
+        if j == lr2:
+            outr.append(cr1)
+            for k in range(i+1, lr1):
+                outr.append(r1[k])
+            f = True
+            break
+        ## Check no overlap conditions
+        if cr1[1] < r2[j][0]:
+            outr.append(cr1)
+            i += 1
+            if i == lr1: break
+            cr1 = r1[i]
+        elif cr1[0] > r2[j][1]:
+            j+=1
+        ## Cases where r1-element ends before r2-element
+        elif cr1[1] <= r2[j][1]:
+            if cr1[0] < r2[j][0]:
+                outr.append([cr1[0], r2[j][0]-1])
+            i += 1
+            if i == lr1: break
+            cr1 = r1[i]
+        ## Cases where r1-element ends after r2-element
+        else:
+            if cr1[0] < r2[j][0]:
+                outr.append([cr1[0], r2[j][0]-1])
+            cr1 = [r2[j][1]+1, cr1[1]]
+            j += 1
+    return(outr)
 # END
 
 
@@ -336,7 +317,7 @@ def pminf(array):
     return pmin_list
 # END
 
- 
+
 def cumminf(array):
     cummin = []
     cumulative_min = array[0]
@@ -347,7 +328,7 @@ def cumminf(array):
     return cummin
 # END
 
- 
+
 def cummaxf(array):
     cummax = []
     cumulative_max = array[0]
@@ -358,7 +339,7 @@ def cummaxf(array):
     return cummax
 # END
 
- 
+
 def order(*args):
     if len(args) > 1:
         if args[1].lower() == 'false':# if ($string1 eq $string2) {
@@ -372,12 +353,12 @@ def order(*args):
         return sorted(range(len(args[0])), key=lambda k: args[0][k])
 # END
 
- 
+
 def p_adjust(*args):
     """
-    copied from 
+    copied from
     https://rosettacode.org/wiki/P-value_correction#Python
-    
+
     """
     method = "bh"
     pvalues = args[0]
@@ -389,7 +370,7 @@ def p_adjust(*args):
     lp = len(pvalues)
     n = lp
     qvalues = []
- 
+
     if method == 'hochberg':#already all lower case
         o = order(pvalues, 'TRUE')
         cummin_input = []
@@ -481,7 +462,7 @@ def p_adjust(*args):
     return qvalues
 # END
 
- 
+
 def unlist(nestedList):
     import numpy as np
     """Take a nested-list as input and return a 1d list of all elements in it"""
@@ -502,7 +483,7 @@ def getValues(l, index):
 
 
 def getColors(colorPalette, numOfCol):
-	return([colorPalette(i/numOfCol) for i in range(numOfCol)])
+    return([colorPalette(i/numOfCol) for i in range(numOfCol)])
 # END
 
 
@@ -531,6 +512,48 @@ def intersect(*lists):
 # END
 
 
+def fileRemove(fName):
+    try:
+        os.remove(fName)
+    except OSError as e:
+        if e.errno != 2:    ## 2 is the error number when no such file or directory is present https://docs.python.org/2/library/errno.html
+            raise
+# END
+
+
+def view(d, n=5):
+    """
+    For some objects, like dict, it is difficult to view just a part of it (like head).
+    This function provides a `head` like utility.
+    
+    NOTE: Should not be used to iterators
+    """
+    # TODO: Make it work properly
+    try:
+        iter = d.__iter__()
+    except AttributeError as e:
+        print(f"Object of type: {type(d)} is not iterable. Exiting")
+        return
+    # dicttypes = {'dict', 'defaultdict', }
+    count = 0
+    isdict = True if 'dict' in str(type(d)).lower() else False
+    for i in iter:
+        print(f"{i}: {d[i]}" if isdict else i)
+        count += 1
+        if count == n: break
+    retrun
+# END
+
+
+
+
+
+############################# APIs #############################################
+
+
+
+
+
 def readblast(f):
     """
     Read tabular format blast output
@@ -541,6 +564,10 @@ def readblast(f):
 
 
 def density_scatter(x, y, ax=None, fig=None, sort=True, bins=20, **kwargs):
+    """
+    
+    """
+    # TODO: See if this can be converted to a command-line API
     import numpy as np
     import matplotlib.pyplot as plt
     from matplotlib import cm
@@ -650,93 +677,22 @@ def subnuc(args):
 # END
 
 
-def fileRemove(fName):
-    try:
-        os.remove(fName)
-    except OSError as e:
-        if e.errno != 2:    ## 2 is the error number when no such file or directory is present https://docs.python.org/2/library/errno.html
-            raise
-# END
-
-
-def mergeRanges(ranges):
+def rtigercos(bed):
     """
-    Take a 2D numpy array, with each row as a range and return merged ranges
-    i.e. ranges which are overlapping would be combined.
-    :param ranges:
+    Reads RTIGER output BED file and return the CO table
+    :param bed:
     :return:
     """
+    import pandas as pd
     from collections import deque
-    import numpy as np
-    if len(ranges) < 2:
-        return ranges
-    for i in ranges:
-        if i[0] > i[1]:
-            i[1], i[0] = i[0], i[1]
-    ranges = ranges[ranges[:, 0].argsort()]
-    min_value = ranges[0, 0]
-    max_value = ranges[0, 1]
-    out_range = deque()
-    for i in ranges[1:]:
-        if i[0] > max_value:
-            out_range.append([min_value, max_value])
-            min_value = i[0]
-            max_value = i[1]
-        elif i[1] > max_value:
-            max_value = i[1]
-    out_range.append([min_value, max_value])
-    return np.array(out_range)
+    bed = pd.read_table(bed, header=None)
+    cos = deque()
+    for g in bed.groupby([0]):
+        for i in range(g[1].shape[0] - 1):
+            cos.append([g[0], g[1].iat[i, 2], g[1].iat[i+1, 1], g[1].iat[i, 3], g[1].iat[i+1, 3]])
+    return pd.DataFrame(cos)
 # END
 
-
-def subranges(r1, r2):
-    """
-    Subtract range2 (r2) from range1 (r1) and return non-overlaping range.
-    Both ranges are considered closed.
-    """
-    from collections import deque
-    import numpy as np
-    # Get sorted and merged ranges.
-    r1 = mergeRanges(np.array(r1))
-    r2 = mergeRanges(np.array(r2))
-    i = 0
-    j = 0
-    lr1 = len(r1)
-    lr2 = len(r2)
-    cr1 = r1[i]
-    outr = deque()
-    f = False
-    while True:
-        if i == lr1: break
-        if j == lr2:
-            outr.append(cr1)
-            for k in range(i+1, lr1):
-                outr.append(r1[k])
-            f = True
-            break
-        ## Check no overlap conditions
-        if cr1[1] < r2[j][0]:
-            outr.append(cr1)
-            i += 1
-            if i == lr1: break
-            cr1 = r1[i]
-        elif cr1[0] > r2[j][1]:
-            j+=1
-        ## Cases where r1-element ends before r2-element
-        elif cr1[1] <= r2[j][1]:
-            if cr1[0] < r2[j][0]:
-                outr.append([cr1[0], r2[j][0]-1])
-            i += 1
-            if i == lr1: break
-            cr1 = r1[i]
-        ## Cases where r1-element ends after r2-element
-        else:
-            if cr1[0] < r2[j][0]:
-                outr.append([cr1[0], r2[j][0]-1])
-            cr1 = [r2[j][1]+1, cr1[1]]
-            j += 1
-    return(outr)
-# END
 
 
 def total_size(o, handlers={}, verbose=False):
@@ -1187,19 +1143,23 @@ def bamcov(args):
     import numpy as np
     formatwarning_orig = warnings.formatwarning
     warnings.formatwarning = lambda message, category, filename, lineno, line=None:    formatwarning_orig(message, category, filename, lineno, line='')
+    print(args)
     BAM = args.bam.name
     OUT = args.out.name
-    BED = args.r.name if args.r is not None else None
+    BED = None if args.r is None else args.r.name
     # if BED is not None:
     #     sys.exit("SELECTING REGIONS (-R) HAS NOT BEEN IMPLEMENTED YET. PLEASE DO NOT USE IT.")
     D = args.d
     if not os.path.isfile(BAM):
         sys.exit('BAM file is not found: {}'.format(BAM))
-    if not os.path.isfile(BED):
-        sys.exit('BED file is not found: '.format(BED))
-    else:
-        # Update samtools depth command to include the BED file as well
-        D += f" -b {BED}"
+    try :
+        if not os.path.isfile(BED):
+            sys.exit('BED file is not found: '.format(BED))
+        else:
+            # Update samtools depth command to include the BED file as well
+            D += f" -b {BED}"
+    except TypeError:
+        pass
 
     # Get chromosome names and lengths
     p = Popen("samtools view -H {}".format(BAM).split(), stdout=PIPE, stderr=PIPE)
@@ -1261,7 +1221,7 @@ def bamcov(args):
         for k, v in chrrd.items():
             fout.write("{}\t{}\n".format(k, v/chrlen[k]))
         if args.g:
-            fout.write("Genome\t{}\n".format(round(sum(chrrd.values())/sum(chrlen.values()))))
+            fout.write("Genome\t{}\n".format(round(sum(chrrd.values())/sum(chrlen.values()), ndigits=2)))
     os.remove(tname)
     # TODO: Add method to filter for BED regions
 # END
@@ -1587,7 +1547,7 @@ def asmreads(args):
         raise Exception
     gfa = args.gfa.name
     agp = args.agp.name if args.agp is not None else None
-    def getcontig(agp, c, s, e):
+    def getcontigfromagp(agp, c, s, e):
         """
         Reads AGP and select contig overlapping the given position
         """
@@ -1604,7 +1564,7 @@ def asmreads(args):
                         return line[5], int(line[7]) - (e - int(line[1])), int(line[7]) - (s - int(line[1]))
         return None
     # END
-    def getreads(gfa, c, s, e):
+    def getreadsfromgfa(gfa, c, s, e):
         from collections import deque
         reads = deque()
         with open(gfa, 'r') as fin:
@@ -1614,21 +1574,25 @@ def asmreads(args):
                 if line[0] == 'S': continue
                 line = line.strip().split()
                 if line[1] != c:
-                    if not cfnd: continue
-                    else: break
+                    if cfnd: break
+                    continue
                 cfnd = True
                 if (s > int(line[2]) + int(line[6])) or (e < int(line[2])):
-                    if not sfnd: continue
-                    else: break
+                    if sfnd: break
+                    continue
                 sfnd = True
                 reads.append(line[4])
         return reads
     # END
 
-    if agp is not None: contig, start, end = getcontig(agp, c, s, e)
+    if agp is not None:
+        try:
+            contig, start, end = getcontigfromagp(agp, c, s, e)
+        except TypeError:
+            return
     if contig is None:
         raise ValueError("Input genomic coordinates overlap more than 1 contig or overlap a gap. This case cannot be handled currently. Provide smaller input coordinate.")
-    for r in getreads(gfa, contig, start, end):
+    for r in getreadsfromgfa(gfa, contig, start, end):
         print(r)
 # END
 
@@ -1665,7 +1629,6 @@ def mapbp(args):
     """
     import pysam
     from collections import defaultdict, deque
-    from classes import Cigar
 
     def getsyripos(sout, pos):
         """
@@ -1685,6 +1648,10 @@ def mapbp(args):
         qryreg = defaultdict(deque)
         sout = pysam.TabixFile(sfin)
         poso = getsyripos(sout, pos)    # Positions overlapping
+        if len(poso) == 1:
+            if poso[0][10] == 'NOTAL':
+                # print('NOTAL')
+                return 'NOTAL'
         for p in poso:
             if 'AL' in p[10]:
                 qryreg[p[5]].append([int(p[6]), int(p[7])])
@@ -1693,6 +1660,7 @@ def mapbp(args):
         # break
         qs = al.qstart + (al.cigartuples[0][1] if al.cigartuples[0][0] in {4, 5} else 0) + 1
         qe = qs + al.qlen - 1
+        # print(qs, qe)
         if hassfin:
             if al.query_name not in qryreg:
                 continue
@@ -1702,6 +1670,8 @@ def mapbp(args):
         p = qs + cgwalk(cgtpl(al.cigarstring, to_int=True), n) - 1
         print(f"{al.query_name}:{p}-{p}")
 # END
+
+
 
 
 if __name__ == '__main__':

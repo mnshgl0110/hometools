@@ -271,5 +271,106 @@ class Cigar:
                 return 'I', True, True
             elif rtp == 'I':
                 return 'I', True, True
+# END
+
+
+class snvdata:
+    """
+    Class to store pileup data. Reads the first six mandatory columns and stores them.
+    Each line is an object.
+    For reading extra column, use the setattr function
+    """
+
+    def __init__(self, ls):
+        self.chr = ls[0]
+        self.pos = int(ls[1])
+        self.ref = ls[2]
+        self.rc  = int(ls[3])
+        self.indelcount, self.bases = [0, []] if self.rc == 0 else self._getbases(ls[4])
+        if len(self.bases) != self.rc:
+            raise Exception('Number of identified bases if not equals to read count for {}:{}. ReadCount: {}, BaseCount: {}'.format(self.chr, self.pos, self.rc, len(self.bases)))
+        self.BQ = [ord(c) - 33 for c in ls[5]]
+
+    def _getbases(self, l):
+        from collections import deque
+        indelcount = 0
+        bases = deque()
+        skip = 0
+        indel = False
+        for c in l:
+            if skip > 0 and indel == False:
+                skip -= 1
+                continue
+            if indel == True:
+                if c in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']:
+                    skip = (skip*10) + int(c)
+                    continue
+                # skip = int(c)
+                else:
+                    indel = False
+                    skip -= 1
+                    continue
+            if c == '*':
+                # self.indelcount += 1
+                # indelcount += 1
+                bases.append(c)
+                continue
+            if c == '$': continue
+            if c in ['<', '>']: sys.exit('spliced alignment found')
+            if c == '^':
+                skip = 1
+                continue
+            if c in ['+', '-']:
+                indel = True
+                indelcount += 1
+                continue
+            bases.append(c)
+        return [indelcount, list(bases)]
+
+    def forwardcnt(self):
+        try:
+            return self.fcnt
+        except AttributeError as e:
+            self.fcnt = len([1 for i in self.bases if i in ['.', 'A', 'C', 'G', 'T']])
+            self.rcnt = self.rc - self.fcnt
+            return self.fcnt
+
+    def reversecnt(self):
+        try:
+            return self.rcnt
+        except AttributeError as e:
+            self.rcnt = len([1 for i in self.bases if i in [',', 'a', 'c', 'g', 't']])
+            self.fcnt = self.rc - self.rcnt
+            return self.rcnt
+
+    def basecnt(self, base):
+        return len([1 for i in self.bases if i == base])
+
+    def getBQ(self, base):
+        return [self.BQ[i] for i in range(len(self.bases)) if self.bases[i] == base]
+
+    def getindelreads(self, bases, reads):
+        from collections import deque
+        self.indelreads = deque()
+        reads = reads.split(",")
+        for i in range(len(reads)):
+            if bases[0] == '^':
+                bases == bases[3:]
+                continue
+            if bases[0] == '$':
+                bases = bases[1:]
+            if len(bases) == 1:
+                continue
+            if bases[1] not in ['+', '-']:
+                bases = bases[1:]
+            else:
+                self.indelreads.append(reads[i])
+                bases = bases[2:]
+                skip = 0
+                while bases[0] in {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'}:
+                    skip = (skip*10) + int(bases[0])
+                    bases = bases[1:]
+                bases = bases[skip:]
+# END
 
 
