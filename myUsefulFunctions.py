@@ -107,24 +107,32 @@ def writefasta(fa, f):
 # END
 
 
-def readfasta_iterator(fin):
-    # TODO: Extend this to
+def readfasta_iterator(fin, isgzip=False):
+    # from gzip import open as gzopen
     from collections import deque
-    title = ''
+    """
+    :param fin: File handle (already opened using normal open or gzip.open)
+    :param isgzip: True when reading gzipped files, false for text files
+    """
     seq = deque()
+    b, nl, empty, sep = (b'>', b'\n', b'', b' ') if isgzip else ('>', '\n', '', ' ')
+    title = empty
+    out = lambda x: (x[0].decode(), x[1].decode()) if isgzip else x
     for line in fin:
-        if line.strip() == '': continue
-        if line[0] == '>':
-            if title == '':
-                title = line[1:].rstrip().split(' ')[0]
+        if line.strip() == empty: continue
+        if line[0] == b[0]:
+            if title == empty:
+                title = line[1:].rstrip().split(sep)[0]
             else:
-                yield title, ''.join(seq)
+                # yield title.decode(), empty.join(seq).decode()
+                yield out((title, empty.join(seq)))
                 seq = deque()
-                title = line[1:].rstrip().split(' ')[0]
+                title = line[1:].rstrip().split(sep)[0]
         else:
             seq.append(line.strip())
-    yield title, ''.join(seq)
+    yield out((title, empty.join(seq)))
 # END
+
 
 def readfaidxbed(f):
     """
@@ -137,12 +145,47 @@ def readfaidxbed(f):
     with open(f, 'r') as fin:
         for line in fin:
             line = line.strip().split()
-            fabed.append([line[0], 1, int(line[1])])
+            fabed.append([line[0], 0, int(line[1])])
     return list(fabed)
 # END
 
 
 ############################# Other ############################################
+
+def setlogconfig(lg):
+    """
+    :param lg: Log-level 
+    :return: 
+    """
+    import logging.config
+    logging.config.dictConfig({
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'log_file': {
+                'format': "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s",
+            },
+            'stdout': {
+                'format': "%(name)s - %(levelname)s - %(message)s",
+            },
+        },
+        'handlers': {
+            'stdout': {
+                'class': 'logging.StreamHandler',
+                'formatter': 'stdout',
+                'level': 'WARNING',
+            },
+        },
+        'loggers': {
+            '': {
+                'level': lg,
+                'handlers': ['stdout'],
+                # 'handlers': ['stdout', 'log_file'],
+            },
+        },
+    })
+#END
+
 
 ############################# CIGAR ############################################
 
@@ -156,6 +199,14 @@ def cgtpl(cg, to_int=False):
         return [inttr(i.split(';')) for i in cg.split(',')[:-1]]
     else:
         return [i.split(';') for i in cg.split(',')[:-1]]
+# END
+
+
+def cgstr(cg):
+    """
+    Converts a CIGAR tuple into a CIGAR string
+    """
+    return "".join(["".join([str(i[0]), i[1]]) for i in cg])
 # END
 
 
@@ -182,10 +233,10 @@ def cgwalk(cg, n, ngen='r'):
     """
     cnt = 0                   # Count in the focal genome
     ocnt = 0                  # Count in the other genome
-    nset = set(['M', 'D', 'N', '=', 'X']) if ngen == 'r' else set(['M', 'I', 'S', '=', 'X'])
-    oset = set(['M', 'I', 'S', '=', 'X']) if ngen == 'r' else set(['M', 'D', 'N', '=', 'X'])
+    nset = set(['M', 'D', 'N', '=', 'X']) if ngen == 'r' else set(['M', 'I', '=', 'X'])
+    oset = set(['M', 'I', '=', 'X']) if ngen == 'r' else set(['M', 'D', 'N', '=', 'X'])
     for c in cg:
-        if c[1] in {'H', 'P'}: continue
+        if c[1] in {'H', 'P', 'S'}: continue
         if c[1] in nset:
             if n <= cnt + c[0]:
                 if c[1] in {'M', '=', 'X'}:
@@ -198,6 +249,7 @@ def cgwalk(cg, n, ngen='r'):
             ocnt += c[0]
     raise ValueError("n is larger than the number of based covered by cigartuple")
 # END
+
 
 ############################# UTIL #############################################
 def randomstring(l):
@@ -541,7 +593,7 @@ def view(d, n=5):
         print(f"{i}: {d[i]}" if isdict else i)
         count += 1
         if count == n: break
-    retrun
+    return
 # END
 
 
@@ -549,8 +601,6 @@ def view(d, n=5):
 
 
 ############################# APIs #############################################
-
-
 
 
 
@@ -692,7 +742,6 @@ def rtigercos(bed):
             cos.append([g[0], g[1].iat[i, 2], g[1].iat[i+1, 1], g[1].iat[i, 3], g[1].iat[i+1, 3]])
     return pd.DataFrame(cos)
 # END
-
 
 
 def total_size(o, handlers={}, verbose=False):
@@ -1658,8 +1707,9 @@ def mapbp(args):
     bam = pysam.AlignmentFile(mapfin)
     for al in bam.fetch(*pos):
         # break
-        qs = al.qstart + (al.cigartuples[0][1] if al.cigartuples[0][0] in {4, 5} else 0) + 1
+        qs = al.qstart + (al.cigartuples[0][1] if al.cigartuples[0][0] == 5 else 0) + 1
         qe = qs + al.qlen - 1
+        # print(qs, qe)
         # print(qs, qe)
         if hassfin:
             if al.query_name not in qryreg:
@@ -1672,6 +1722,176 @@ def mapbp(args):
 # END
 
 
+def plotal(args):
+    """
+    Input file format:
+    genome1:chr1:start-end  genome2:chr2:start-end  Colour
+    1:1:2-15        2:1:1-14        #006c66
+    2:1:1-14        3:1:3-16        #006c66
+    3:1:3-16        4:1:1-14        #006c66
+
+    :param args:
+    :return:
+    """
+
+    from collections import deque
+    import pandas as pd
+    from matplotlib import pyplot as plt
+    from matplotlib.pyplot import get_cmap
+    import matplotlib
+
+    finname = args.align.name
+    out = args.out.name
+    DPI = args.D
+
+    als = deque()
+    # Read alignments
+    with open(finname, 'r') as fin:
+        for line in fin:
+            if line[0] == '#': continue
+            line = line.strip().split()
+            if len(line) == 0: continue
+            s = line[0].split(':')
+            s += s[2].split('-')
+            s.pop(2)
+            e = line[1].split(':')
+            e += e[2].split('-')
+            e.pop(2)
+            als.append(s + e + [line[2]])
+    als = pd.DataFrame(als)
+    als[[2, 3, 6, 7]] = als[[2, 3, 6, 7]].astype(int)
+
+    ngen = len(set(pd.concat([als[0], als[4]])))
+    gdict = dict(zip(pd.unique(pd.concat([als[0], als[4]])), range(ngen-1, -1, -1)))
+    maxp = als[[2, 3, 6, 7]].max().max()
+
+    fig = plt.figure(figsize=[5, 4])
+    ax = fig.add_subplot()
+    ax.set_ylim([-0.1, ngen - 1 + 0.1])
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.axes.xaxis.set_visible(False)
+    ax.axes.yaxis.set_visible(False)
+
+
+    if ngen <= 10:
+        CHRCOLS = [matplotlib.colors.to_hex(get_cmap('tab10')(i)) for i in range(ngen)]
+    else:
+        CHRCOLS = [matplotlib.colors.to_hex(get_cmap('gist_rainbow')(int(255/ngen) * i)) for i in range(0, ngen)]
+        if ngen % 2 != 0:
+            m = CHRCOLS[int((ngen/2) + 1)]
+            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i +ngen/2)]]] + [m]
+        else:
+            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i +ngen/2)]]]
+
+
+    for i in range(ngen):
+        ax.hlines(ngen - 1 - i, 1, maxp,
+                     color=CHRCOLS[i],
+                     linewidth=5,
+                     zorder=2)
+
+    # print(gdict)
+    for al in als.itertuples(index=False):
+        # zorder = 0 if abs(gdict[al[0]] - gdict[al[4]]) == 1 else 3
+        ax.add_patch(bezierpath(al[2], al[3], al[6], al[7], gdict[al[0]], gdict[al[4]], False, al[8], 1))
+    plt.tight_layout(pad=0, h_pad=0, w_pad=0)
+    plt.savefig(out, dpi=DPI)
+    plt.close()
+# END
+
+
+def bezierpath(rs, re, qs, qe, ry, qy, v, col, alpha, label='', lw=0, zorder=0):
+    import matplotlib.patches as patches
+    from matplotlib.path import Path
+    smid = (qs-rs)/2    # Start increment
+    emid = (qe-re)/2    # End increment
+    hmid = (qy-ry)/2    # Height increment
+    if not v:
+        verts = [(rs, ry),
+                 (rs, ry+hmid),
+                 (rs+2*smid, ry+hmid),
+                 (rs+2*smid, ry+2*hmid),
+                 (qe, qy),
+                 (qe, qy-hmid),
+                 (qe-2*emid, qy-hmid),
+                 (qe-2*emid, qy-2*hmid),
+                 (rs, ry),
+                 ]
+    else:
+        verts = [(ry, rs),
+                 (ry+hmid, rs),
+                 (ry+hmid, rs+2*smid),
+                 (ry+2*hmid, rs+2*smid),
+                 (qy, qe),
+                 (qy-hmid, qe),
+                 (qy-hmid, qe-2*emid),
+                 (qy-2*hmid, qe-2*emid),
+                 (ry, rs),
+                 ]
+    codes = [
+        Path.MOVETO,
+        Path.CURVE4,
+        Path.CURVE4,
+        Path.CURVE4,
+        Path.LINETO,
+        Path.CURVE4,
+        Path.CURVE4,
+        Path.CURVE4,
+        Path.CLOSEPOLY,
+    ]
+    path = Path(verts, codes)
+    patch = patches.PathPatch(path, facecolor=col, lw=lw, alpha=alpha, label=label, edgecolor=col, zorder=zorder)
+    return patch
+# END
+
+def fachrid(args):
+    fa = args.fa.name
+    out = args.out.name
+    names = args.names.name
+    iddict = {}
+    with open(names, 'r') as fin:
+        for line in fin:
+            line = line.strip().split()
+            iddict[line[0]] = line[1]
+    fasta = readfasta(fa)
+    chrs = list(fasta.keys())
+    outfasta = {}
+    for c in chrs:
+        if c in iddict:
+            outfasta[iddict[c]] = fasta[c]
+    writefasta(outfasta, out)
+# END 
+
+
+def runsryi(args):
+    from subprocess import Popen
+    ref = args.ref.name
+    qry = args.qry.name
+    N = args.n
+    prefix = args.p
+    altype = args.alignment
+
+    alfile = f'{prefix}.{altype}'
+    # align the genomes
+    if altype == 'paf':
+        command = f'minimap2 -cx asm5 -t {N} --eqx -o {alfile} {ref} {qry}'
+        proc = Popen(command.split())
+        proc.wait()
+    else:
+        command = f'minimap2 -ax asm5 -t {N} --eqx {ref} {qry} | samtools sort -@ {N} -O {altype.upper()} -o {alfile} - '
+        # Use shell=True so make the pipe work
+        proc = Popen(command, shell=True)
+        proc.wait()
+        proc = Popen(f'samtools index -@ {N} {alfile}'.split())
+        proc.wait()
+    # Run syri
+    proc = Popen(f'syri -c {alfile} -r {ref} -q {qry} -F {altype[0].upper()} --prefix {prefix} --nc {N}'.split())
+    proc.wait()
+    return
+# END
 
 
 if __name__ == '__main__':
@@ -1705,11 +1925,41 @@ if __name__ == '__main__':
     parser_shannon = subparsers.add_parser("shannon", help="Get Shanon entropy across the length of the chromosomes using sliding windows", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_asmreads = subparsers.add_parser("asmreads", help="For a given genomic region, get reads that constitute the corresponding assembly graph", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_mapbp = subparsers.add_parser("mapbp", help="For a given reference coordinate get the corresponding base and position in the reads/segments mapping the reference position", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_plotal = subparsers.add_parser("plotal", help="Visualise pairwise-whole genome alignments between multiple genomes", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_fachrid = subparsers.add_parser("fachrid", help="Change chromosome IDs", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_runsyri = subparsers.add_parser("runsyri", help="Parser to align and run syri on two genomes", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+    
 
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
+
+    # runsyri
+    parser_runsyri.set_defaults(func=runsryi)
+    parser_runsyri.add_argument("ref", help='Reference genome', type=argparse.FileType('r'))
+    parser_runsyri.add_argument("qry", help='Query genome', type=argparse.FileType('r'))
+    parser_runsyri.add_argument("-n", help='Number of cores to use', type=int, default=1)
+    parser_runsyri.add_argument("-p", help='prefix', type=str, default='out')
+    parser_runsyri.add_argument("-alignment", help='Output alignment type', choices=['sam', 'bam', 'paf'], default='paf', type=str)
+
+
+    # fachrid
+    parser_fachrid.set_defaults(func=fachrid)
+    # TODO : Clarify input alignment file format
+    parser_fachrid.add_argument("fa", help='Input fasta file', type=argparse.FileType('r'))
+    parser_fachrid.add_argument("out", help='Output fasta file', type=argparse.FileType('w'))
+    parser_fachrid.add_argument("names", help='Table listing old and new names', type=argparse.FileType('r'))
+
+
+    # plotal
+    parser_plotal.set_defaults(func=plotal)
+    # TODO : Clarify input alignment file format
+    parser_plotal.add_argument("align", help='Input alignment file', type=argparse.FileType('r'))
+    parser_plotal.add_argument("out", help='Output file name', type=argparse.FileType('w'))
+    parser_plotal.add_argument("-D", help='DPI', type=int, default=300)
+
+
 
     # mapbp
     parser_mapbp.set_defaults(func=mapbp)
