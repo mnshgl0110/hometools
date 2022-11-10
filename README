@@ -1,10 +1,10 @@
 usage: Collections of command-line functions to perform common pre-processing and analysis functions.
        [-h]
-       {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,plthist,gfftrans,vcfdp,gffsort,getcol,bamcov,pbamrc,ppileup,splitbam,smprow,gfatofa,faline}
+       {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,plthist,gfftrans,vcfdp,gffsort,getcol,bamcov,pbamrc,ppileup,splitbam,smprow,gfatofa,faline,shannon,asmreads,mapbp,plotal,fachrid,runsyri}
        ...
 
 positional arguments:
-  {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,plthist,gfftrans,vcfdp,gffsort,getcol,bamcov,pbamrc,ppileup,splitbam,smprow,gfatofa,faline}
+  {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,plthist,gfftrans,vcfdp,gffsort,getcol,bamcov,pbamrc,ppileup,splitbam,smprow,gfatofa,faline,shannon,asmreads,mapbp,plotal,fachrid,runsyri}
     getchr              Get specific chromosomes from the fasta file
     sampfa              Sample random sequences from a fasta file
     exseq               extract sequence from fasta
@@ -37,6 +37,17 @@ positional arguments:
     gfatofa             Convert a gfa file to a fasta file
     faline              Convert fasta file from single line to multi line or
                         vice-versa
+    shannon             Get Shanon entropy across the length of the
+                        chromosomes using sliding windows
+    asmreads            For a given genomic region, get reads that constitute
+                        the corresponding assembly graph
+    mapbp               For a given reference coordinate get the corresponding
+                        base and position in the reads/segments mapping the
+                        reference position
+    plotal              Visualise pairwise-whole genome alignments between
+                        multiple genomes
+    fachrid             Change chromosome IDs
+    runsyri             Parser to align and run syri on two genomes
 
 optional arguments:
   -h, --help            show this help message and exit
