@@ -14,7 +14,7 @@ import argparse
 import os
 import sys
 
-from classes import Cigar
+from classes import Cigar, CustomFormatter
 class Namespace:
     """
     Use this to create args object for parsing to functions
@@ -247,7 +247,7 @@ def cgwalk(cg, n, ngen='r'):
                 cnt += c[0]
         if c[1] in oset:
             ocnt += c[0]
-    raise ValueError("n is larger than the number of based covered by cigartuple")
+    raise ValueError("n is larger than the number of bases covered by cigartuple")
 # END
 
 
@@ -595,9 +595,6 @@ def view(d, n=5):
         if count == n: break
     return
 # END
-
-
-
 
 
 ############################# APIs #############################################
@@ -1894,6 +1891,286 @@ def runsryi(args):
 # END
 
 
+def readsyriout(f, annos=['SYN', 'SYNAL', 'INV', 'TRANS', 'INVTR', 'DUP', 'INVDP']):
+    """
+    There is a version in reganno.py as well
+    """
+    from collections import OrderedDict, deque
+    import logging
+    import pandas as pd
+    import numpy as np
+
+    logger = logging.getLogger("readsyriout")
+    # Reads syri.out. Select: achr, astart, aend, bchr, bstart, bend, srtype
+    # assert(all([v in ['SYN', 'SYNAL', 'INV', 'TRANS', 'INVTR', 'DUP', 'INVDP', 'NOTAL'] for v in annos]))
+    syri_regs = deque()
+    with open(f, 'r') as fin:
+        for line in fin:
+            l = line.strip().split()
+            if l[10] in annos:
+                syri_regs.append(l)
+
+    try:
+        df = pd.DataFrame(list(syri_regs))[[0, 1, 2, 5, 6, 7, 10, 3, 4]]
+        df = df.loc[df[0] != '-']
+    except KeyError:
+        raise ImportError("Incomplete input file {}, syri.out file should have 11 columns.".format(f))
+    df[[0, 5, 10]] = df[[0, 5, 10]].astype(str)
+    try:
+        if 'NOTAL' in annos:
+            df[[1, 2]] = df[[1, 2]].astype(int)
+        else:
+            df[[1, 2, 6, 7]] = df[[1, 2, 6, 7]].astype(int)
+    except ValueError:
+        raise ValueError("Non-numerical values used as genome coordinates in {}. Exiting".format(f))
+
+    df.sort_values([0, 1, 2], inplace=True)
+    # chr ID map: DO NOT DELETE AS WILL BE USED IN SOME FUNCTIONS
+    # chrid = []
+    # chrid_dict = OrderedDict()
+    # for i in np.unique(df[0]):
+    #     chrid.append((i, np.unique(df.loc[(df[0] == i) & (df[10] == 'SYN'), 5])[0]))
+    #     chrid_dict[i] = np.unique(df.loc[(df[0] == i) & (df[10] == 'SYN'), 5])[0]
+    # df.columns = ['achr', 'astart', 'aend', 'bchr', 'bstart', 'bend',  'type']
+
+    return df
+# END
+
+
+def samtocoords(f):
+    '''
+    Reads a SAM file and converts it to a align coords file
+    '''
+    # TODO: adjust this function to work similarly to bam2coords
+    from pandas import DataFrame
+    from collections import deque
+    logger = logging.getLogger('SAM reader')
+    rc = {}        # Referece chromosomes
+    rcs = {}        # Selected chromosomes
+    al = deque()    # Individual alignment
+    try:
+        with open(f, 'r') as fin:
+            for l in fin:
+                if l[:3] == '@SQ':
+                    c, s = 0, 0
+                    for h in l.strip().split()[1:]:
+                        h = h.split(':')
+                        if h[0] == 'SN': c = h[1]
+                        if h[0] == 'LN': s = int(h[1])
+                    rcs[c] = s
+                    continue
+                elif l[0] == '@': continue
+
+                l = l.split('\t')[:6]
+                # if l[1] == '2064': break
+                if l[2] == '*':
+                    logger.warning(l[0]+ ' do not align with any reference sequence and cannot be analysed. Remove all unplaced scaffolds and contigs from the assemblies.')  # Skip rows corresponding to non-mapping sequences (contigs/scaffolds)
+                    continue
+
+                if 'M' in l[5]:
+                    logger.error('Incorrect CIGAR string found. CIGAR string can only have I/D/H/S/X/=. CIGAR STRING: ' + l[5])
+                    sys.exit()
+                cgt = [[int(j[0]), j[1]] for j in [i.split(';') for i in l[5].replace('S', ';S,').replace('H', ';H,').replace('=', ';=,').replace('X', ';X,').replace('I', ';I,').replace('D', ';D,').split(',')[:-1]]]
+                if len(cgt) > 2:
+                    if True in [True if i[1] in ['S', 'H'] else False for i in cgt[1:-1]]:
+                        logger.error("Incorrect CIGAR string found. Clipped bases inside alignment. H/S can only be in the terminal. CIGAR STRING: " + aln.cigarstring)
+                        sys.exit()
+
+                bf = '{:012b}'.format(int(l[1]))
+
+                rs = int(l[3])
+                re = rs - 1 + sum([i[0] for i in cgt if i[1] in ['X', '=', 'D']])
+
+                if bf[7] == '0':    # forward alignment
+                    if cgt[0][1] == '=':
+                        qs = 1
+                    elif cgt[0][1] in ['S', 'H']:
+                        qs = cgt[0][0] + 1
+                    else:
+                        print('ERROR: CIGAR string starting with non-matching base')
+                    qe = qs - 1 + sum([i[0] for i in cgt if i[1] in ['X', '=', 'I']])
+                elif bf[7] == '1':  # inverted alignment
+                    if cgt[-1][1] == '=':
+                        qs = 1
+                    elif cgt[-1][1] in ['S', 'H']:
+                        qs = cgt[-1][0] + 1
+                    else:
+                        print('ERROR: CIGAR string starting with non-matching base')
+                    qe = qs - 1 + sum([i[0] for i in cgt if i[1] in ['X', '=', 'I']])
+                    qs, qe = qe, qs
+
+                al.append([
+                    rs,
+                    re,
+                    qs,
+                    qe,
+                    abs(re-rs) + 1,
+                    abs(qs-qe) + 1,
+                    format((sum([i[0] for i in cgt if i[1] == '=']) / sum(
+                        [i[0] for i in cgt if i[1] in ['=', 'X', 'I', 'D']])) * 100, '.2f'),
+                    1,
+                    1 if bf[7] == '0' else -1,
+                    l[2],
+                    l[0],
+                    "".join([str(i[0])+i[1] for i in cgt if i[1] in ['=', 'X', 'I', 'D']])
+                ])
+                rcs[l[2]] = 1
+            rcs = list(rcs.keys())
+            for k in list(rc.keys()):
+                if k not in rcs: logger.warning(l[0]+ ' do not align with any query sequence and cannot be analysed. Remove all unplaced scaffolds and contigs from the assemblies.')
+    except Exception as e:
+        logger.error('Error in reading SAM file: ' + str(e))
+        sys.exit()
+    al = DataFrame(list(al))
+    al[6] = al[6].astype('float')
+    al.sort_values([9,0,1,2,3,10], inplace = True, ascending=True)
+    al.index = range(len(al.index))
+    return al
+# END
+
+
+def bam2coords(args):
+    '''
+    Converts alignment SAM/BAM to alignment coords file
+    Strip-down and simplified version. Does not have many checks that are used
+    in the convertor used in syri
+
+    The output coords file can then be bgzip and tabix indexed:
+    bgzip alignment.coords
+    tabix -p bed alignment.coords.gz
+    '''
+
+    # def readSAMBAM(fin, type='B'):
+    import pysam
+    import logging
+    import numpy as np
+    import pandas as pd
+
+    logger = logging.getLogger('Reading BAM/SAM file')
+
+    fin = args.fin.name
+    t = args.t
+    try:
+        if t == 'B':
+            findata = pysam.AlignmentFile(fin, 'rb')
+        elif t == 'S':
+            return samtocoords(fin)
+        else:
+            raise ValueError("Wrong parameter")
+    except ValueError as e:
+        logger.error("Error in opening BAM/SAM file. " + str(e))
+        sys.exit()
+    except OSError as e:
+        logger.error("Error in reading input file." + str(e))
+        sys.exit()
+    except Exception as e:
+        logger.error("Unexpected error in opening BAM/SAM file. " + str(e))
+        sys.exit()
+
+    try:
+        cgdict = {0: 'M', 1: 'I', 2: 'D', 3: 'N', 4: 'S', 5: 'H', 6: 'P', 7: '=', 8: 'X'}
+        coords = {}
+        index = 0
+        # findiden = True
+        for aln in findata:
+            index += 1
+
+            ## Pass non-alinging chromosomes
+            if aln.cigarstring is None:
+                logger.warning(aln.query_name + ' do not align with any reference chromosome and cannot be analysed')
+                continue
+
+            ## Check CIGAR:
+            # Commented the check below as that is not required in general
+            # if False in [False if i[0] not in [1,2,4,5,7,8] else True for i in aln.cigartuples]:
+            #     logger.error("Incorrect CIGAR string found. CIGAR string can only have I/D/H/S/X/=. CIGAR STRING: " + str(aln.cigarstring))
+            #     sys.exit()
+            if len(aln.cigartuples) > 2:
+                if True in [True if i[0] in [4, 5] else False for i in aln.cigartuples[1:-1]]:
+                    logger.error("Incorrect CIGAR string found. Clipped bases inside alignment. H/S can only be in the terminal. CIGAR STRING: " + aln.cigarstring)
+                    sys.exit()
+
+            ## Parse information from the aln object
+            astart = aln.reference_start+1
+            aend = aln.reference_end
+            is_inv = True if np.binary_repr(aln.flag, 12)[7] == '1' else False
+            if not is_inv:
+                if aln.cigartuples[0][0] in [4, 5]:
+                    bstart = aln.cigartuples[0][1]+1
+                else:
+                    bstart = 1
+                bend = bstart + aln.query_alignment_length - 1
+            else:
+                if aln.cigartuples[-1][0] in [4, 5]:
+                    bend = aln.cigartuples[-1][1]+1
+                else:
+                    bend = 1
+                bstart = bend + aln.query_alignment_length - 1
+            alen = abs(aend - astart) + 1
+            blen = abs(bend - bstart) + 1
+
+            # if findiden:
+            #     iden = format((sum([i[1] for i in aln.cigartuples if i[0] == 7])/sum([i[1] for i in aln.cigartuples if i[0] in [1, 2, 7, 8]]))*100, '.2f')
+            adir = 1
+            bdir = -1 if is_inv else 1
+            achr = aln.reference_name
+            bchr = aln.query_name
+            cg = "".join([str(i[1]) + cgdict[i[0]] for i in aln.cigartuples])
+            # coords[index] = [astart, aend, bstart, bend, alen, blen, iden, adir, bdir, achr, bchr, cg]
+            coords[index] = [achr, astart, aend, bchr, bstart, bend, alen, blen, adir, bdir, cg]
+
+        ## Return alignments
+        coords = pd.DataFrame.from_dict(coords, orient='index')
+        coords.sort_values([0, 1, 2, 4, 5, 3], inplace=True, ascending=True)
+        coords.index = range(len(coords.index))
+        # coords[6] = coords[6].astype('float')
+        print(coords.to_csv(index=False, header=False, sep='\t'), end='')
+    except Exception as e:
+        logger.error("Error in reading BAM/SAM file. " + str(e))
+        sys.exit()
+# END
+
+
+def syriidx(args):
+    # syriidx
+    from subprocess import Popen, PIPE
+    import logging
+    logger = logging.getLogger("syriidx")
+    handler = logging.StreamHandler()
+    handler.setFormatter(CustomFormatter())
+    logger.addHandler(handler)
+    logging.basicConfig(level=logging.INFO)
+    logger.propagate = False
+
+    fin = args.syriout.name
+    notal = args.notal
+    filter = args.f
+    annos = ['SYN', 'SYNAL', 'INV', 'TRANS', 'INVTR', 'DUP', 'INVDP']
+    if not filter:
+        annos += ['CPG', 'CPL', 'DEL', 'DUPAL', 'HDR', 'INS', 'INVAL', 'INVDPAL', 'INVTRAL', 'NOTAL', 'SNP', 'TDM', 'TRANSAL']
+    else:
+        logger.info("syri annotations will be filtered")
+    if notal:
+        annos += ['NOTAL']
+    annos = set(annos)
+    logger.info("reading annotations")
+    df = readsyriout(fin, annos)
+    outfin = f'{fin}.bed'
+    df.to_csv(outfin, index=False, header=False, sep='\t')
+    logger.info("Compressing annotations")
+    p = Popen(f"bgzip -f {outfin}".split(), stdout=PIPE, stderr=PIPE)
+    o = p.communicate()
+    if o[1] != b'':
+        sys.exit("Error in bgzip:\n{}".format(o[1].decode()))
+    logger.info("Indexing annotations")
+    p = Popen(f"tabix -fp bed {outfin}.gz".split(), stdout=PIPE, stderr=PIPE)
+    o = p.communicate()
+    if o[1] != b'':
+        sys.exit("Error in tabix:\n{}".format(o[1].decode()))
+    return
+# END
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Collections of command-line functions to perform common pre-processing and analysis functions.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     subparsers = parser.add_subparsers()
@@ -1928,12 +2205,27 @@ if __name__ == '__main__':
     parser_plotal = subparsers.add_parser("plotal", help="Visualise pairwise-whole genome alignments between multiple genomes", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_fachrid = subparsers.add_parser("fachrid", help="Change chromosome IDs", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_runsyri = subparsers.add_parser("runsyri", help="Parser to align and run syri on two genomes", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_bam2coords = subparsers.add_parser("bam2coords", help="Convert BAM/SAM file to alignment coords", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_syriidx = subparsers.add_parser("syriidx", help="Generates index for syri.out. Filters non-SR annotations, then bgzip, then tabix index", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    
 
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
+
+    # syriidx
+    parser_syriidx.set_defaults(func=syriidx)
+    parser_syriidx.add_argument("syriout", help='syri output file', type=argparse.FileType('r'))
+    parser_syriidx.add_argument("-f", help='Only output syntenic and SR regions.', default=False, action='store_true')
+    parser_syriidx.add_argument("--notal", help='Also include reference NOTAL regions', default=False, action='store_true')
+
+
+
+    # bam2coords
+    parser_bam2coords.set_defaults(func=bam2coords)
+    parser_bam2coords.add_argument("fin", help='Input BAM/SAM file', type=argparse.FileType('r'))
+    parser_bam2coords.add_argument("t", help='File type (B: BAM, S: SAM)', type=str, choices=['B', 'S'])
+
 
     # runsyri
     parser_runsyri.set_defaults(func=runsryi)
@@ -2114,9 +2406,9 @@ if __name__ == '__main__':
     
     parser_exseq.set_defaults(func=extractSeq)
     parser_exseq.add_argument("fasta", help="fasta file", type=argparse.FileType('r'))
-    parser_exseq.add_argument("--chr", help="Chromosome ID", type=str)
-    parser_exseq.add_argument("-start", help="Start location (BED format, 0-base, end included)", type=int)
-    parser_exseq.add_argument("-end", help="End location (BED format, 0-base, end excluded)", type=int)
+    parser_exseq.add_argument("-c", "--chr", help="Chromosome ID", type=str)
+    parser_exseq.add_argument("-s", "--start", help="Start location (BED format, 0-base, end included)", type=int)
+    parser_exseq.add_argument("-e", "--end", help="End location (BED format, 0-base, end excluded)", type=int)
     parser_exseq.add_argument("--fin", help="File containing locations to extract (BED format)", type=argparse.FileType('r'))
     parser_exseq.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default=None)
     

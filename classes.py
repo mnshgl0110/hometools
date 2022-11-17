@@ -1,3 +1,4 @@
+import logging
 class Namespace:
     """
     Use this to create args object for parsing to functions
@@ -374,3 +375,27 @@ class snvdata:
 # END
 
 
+class CustomFormatter(logging.Formatter):
+    '''
+    https://betterstack.com/community/questions/how-to-color-python-logging-output/
+    '''
+    grey = "\x1b[38"
+    green = "\x1b[32m"
+    yellow = "\x1b[33"
+    red = "\x1b[31"
+    bold_red = "\x1b[31"
+    reset = "\x1b[0m"
+    format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
+
+    FORMATS = {
+        logging.DEBUG: grey + format + reset,
+        logging.INFO: green + format + reset,
+        logging.WARNING: yellow + format + reset,
+        logging.ERROR: red + format + reset,
+        logging.CRITICAL: bold_red + format + reset
+    }
+
+    def format(self, record):
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
