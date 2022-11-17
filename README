@@ -1,10 +1,10 @@
 usage: Collections of command-line functions to perform common pre-processing and analysis functions.
        [-h]
-       {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,plthist,gfftrans,vcfdp,gffsort,getcol,bamcov,pbamrc,ppileup,splitbam,smprow,gfatofa,faline,shannon,asmreads,mapbp,plotal,fachrid,runsyri}
+       {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,plthist,gfftrans,vcfdp,gffsort,getcol,bamcov,pbamrc,ppileup,splitbam,smprow,gfatofa,faline,shannon,asmreads,mapbp,plotal,fachrid,runsyri,bam2coords,syriidx}
        ...
 
 positional arguments:
-  {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,plthist,gfftrans,vcfdp,gffsort,getcol,bamcov,pbamrc,ppileup,splitbam,smprow,gfatofa,faline,shannon,asmreads,mapbp,plotal,fachrid,runsyri}
+  {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,plthist,gfftrans,vcfdp,gffsort,getcol,bamcov,pbamrc,ppileup,splitbam,smprow,gfatofa,faline,shannon,asmreads,mapbp,plotal,fachrid,runsyri,bam2coords,syriidx}
     getchr              Get specific chromosomes from the fasta file
     sampfa              Sample random sequences from a fasta file
     exseq               extract sequence from fasta
@@ -48,6 +48,9 @@ positional arguments:
                         multiple genomes
     fachrid             Change chromosome IDs
     runsyri             Parser to align and run syri on two genomes
+    bam2coords          Convert BAM/SAM file to alignment coords
+    syriidx             Generates index for syri.out. Filters non-SR
+                        annotations, then bgzip, then tabix index
 
 optional arguments:
   -h, --help            show this help message and exit
