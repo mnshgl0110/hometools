@@ -210,18 +210,26 @@ def cgstr(cg):
 # END
 
 
-def cggenlen(cg, gen):
+def cggenlen(cg, gen, full=False):
     """
     Takes cigar as input, and return the number of bases covered by it the reference
     or query genome.
     Cigar strings are first converted to cigar tuples.
+    Use full=True to get the query length of the entire sequence and not just the aligned region
     """
     if type(cg) == str:
         cg = cgtpl(cg)
-    if gen not in ['r', 'q']:
+    try:
+        assert(gen in ['r', 'q'])
+    except AssertionError:
         raise ValueError('gen need to "r" or "q" for reference or query')
         return
-    s = set(['M', 'D', 'N', '=', 'X']) if gen == 'r' else set(['M', 'I', 'S', '=', 'X'])
+    if gen == 'r':
+        s = set(['M', 'D', 'N', '=', 'X'])
+    elif full:
+        s = set(['M', 'I', 'S', '=', 'X', 'H'])
+    else:
+        s = set(['M', 'I', 'S', '=', 'X'])
     l = sum([int(i[0]) for i in cg if i[1] in s])
     return l
 # END
@@ -262,7 +270,7 @@ def randomstring(l):
     return ''.join(choices(letters, k=l))
 # END
 
-
+################################ RANGES FUNCTIONS ###############################
 def mergeRanges(ranges):
     """
     Take a 2D numpy array, with each row as a range and return merged ranges
@@ -340,6 +348,20 @@ def subranges(r1, r2):
             cr1 = [r2[j][1]+1, cr1[1]]
             j += 1
     return(outr)
+# END
+
+
+def findoverlaps(r1, r2):
+    '''
+    Find r2 elements that overlap with r1 elements
+    '''
+    # pybedtools seems to be working quite well.
+    # bed1 = BedTool.from_dataframe(df1)
+    # bed2 = BedTool.from_dataframe(df2)
+    # for b in bed1.window(bed2, w=0):
+    #   print(b)
+    # df columns: [chr, start, end, ....]
+    pass
 # END
 
 
@@ -655,6 +677,7 @@ def extractSeq(args):
         if args.chr is not None or args.start is not None or args.end is not None:
             warnings.warn("Using --fin. Ignoring --chr, -s, -e")
     f = args.fasta.name
+    r = args.r
     if args.fin is None:
         seqid = args.chr
         q = {c: s for c, s in readfasta(f).items() if c == seqid}
@@ -662,12 +685,11 @@ def extractSeq(args):
             sys.exit("Found multiple chromosomes with same ID. Exiting.")
         start = int(args.start) if args.start is not None else 0
         end = int(args.end) if args.end is not None else len(q[seqid])
-        end = end if end <= len(q[seqid]) else len(q[seqid])
-        # Output the selected sequence
+        outseq = revcomp(q[seqid][start:end]) if r else q[seqid][start:end]
         if args.o is not None:
-            writefasta({seqid: q[seqid][start:end]}, args.o.name)
+            writefasta({seqid: outseq}, args.o.name)
         else:
-            print("> {}\n{}".format(seqid, q[seqid][start:end]))
+            print("> {}\n{}".format(seqid, outseq))
     else:
         fin = pd.read_table(args.fin.name, header=None, delim_whitespace=True)[[0, 1, 2]]
         fin.columns = ["chr", "start", "end"]
@@ -681,7 +703,7 @@ def extractSeq(args):
                 cdf = fin.loc[fin.chr == c].copy()
                 cdf.loc[cdf['end'] > len(s), 'end'] = len(s)
                 for row in cdf.itertuples(index=False):
-                    out['{}_{}_{}'.format(c, row[1], row[2])] = s[row.start:row.end]
+                    out['{}_{}_{}'.format(c, row[1], row[2])] = revcomp(s[row.start:row.end]) if r else s[row.start:row.end]
         # Output the selected sequence
         if args.o is not None:
             writefasta(out, args.o.name)
@@ -692,7 +714,9 @@ def extractSeq(args):
 
 
 def revcomp(seq):
-    assert type(seq) == str
+        # end = end if end <= len(q[seqid]) else len(q[seqid])
+        # # Output the selected sequence
+    assert(type(seq) == str)
     old = 'ACGTRYKMBDHVacgtrykmbdhv'
     rev = 'TGCAYRMKVHDBtgcayrmkvhdb'
     tab = str.maketrans(old, rev)
@@ -1687,6 +1711,7 @@ def mapbp(args):
     sfin = args.anno.name if args.anno is not None else None           # input syri.out file
     hassfin = True if sfin is not None else False
     mapfin = args.map.name
+    d = args.d
     pos = reg_str_to_list(args.pos)
     pos[2] = pos[2] + 1                 # Edit end coordinate to make it suitable for working with syri.out file. Need to be done because syri.out is not in BED format as expected by pysam
     # if syri output is provided, select alignments selected by syri
@@ -1703,11 +1728,9 @@ def mapbp(args):
                 qryreg[p[5]].append([int(p[6]), int(p[7])])
     bam = pysam.AlignmentFile(mapfin)
     for al in bam.fetch(*pos):
-        # break
-        qs = al.qstart + (al.cigartuples[0][1] if al.cigartuples[0][0] == 5 else 0) + 1
+        dircg = al.cigartuples #if al.is_forward else al.cigartuples[::-1]
+        qs = al.qstart + (dircg[0][1] if dircg[0][0] == 5 else 0) + 1
         qe = qs + al.qlen - 1
-        # print(qs, qe)
-        # print(qs, qe)
         if hassfin:
             if al.query_name not in qryreg:
                 continue
@@ -1715,7 +1738,13 @@ def mapbp(args):
                 continue
         n = pos[2] - 1 - al.reference_start
         p = qs + cgwalk(cgtpl(al.cigarstring, to_int=True), n) - 1
-        print(f"{al.query_name}:{p}-{p}")
+        if not al.is_forward:
+            qlen = cggenlen(al.cigarstring, 'q', full=True)
+            p = qlen - p + 1
+        out = f"{al.query_name}:{p}-{p}"
+        if d:
+            out = out + '\t+' if al.is_forward else out + '\t-'
+        print(out)
 # END
 
 
@@ -2258,6 +2287,7 @@ if __name__ == '__main__':
     parser_mapbp.add_argument("pos", help='Genome position in \'chr:start-end\' format.', type=str)
     parser_mapbp.add_argument("map", help='Alignment file in BAM/PAF format.', type=argparse.FileType('r'))
     parser_mapbp.add_argument("--anno", help='Syri annotation file. Only alignments present in the syri output would be selected. Need indexed with tabix.', type=argparse.FileType('r'))
+    parser_mapbp.add_argument("-d", help='Output alignment strand (sense(+)/antisense(-))', default=False, action='store_true')
 
 
     # asmreads
@@ -2411,7 +2441,8 @@ if __name__ == '__main__':
     parser_exseq.add_argument("-e", "--end", help="End location (BED format, 0-base, end excluded)", type=int)
     parser_exseq.add_argument("--fin", help="File containing locations to extract (BED format)", type=argparse.FileType('r'))
     parser_exseq.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default=None)
-    
+    parser_exseq.add_argument("-r", help="Reverse complement the sequence", default=False, action='store_true')
+
     parser_getscaf.set_defaults(func=getScaf)
     parser_getscaf.add_argument("fasta", help="genome fasta file", type=argparse.FileType('r'))
     parser_getscaf.add_argument("n", help="number of scaffolds required", type=int)
