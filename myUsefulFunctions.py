@@ -150,9 +150,6 @@ def readfaidxbed(f):
 # END
 
 
-############################# Other ############################################
-
-
 ############################# CIGAR ############################################
 
 def cgtpl(cg, to_int=False):
@@ -257,7 +254,7 @@ def setlogconfig(lg):
             },
         },
     })
-#END
+# END
 
 def mylogger(logname):
     import logging
@@ -294,6 +291,8 @@ def mergepdf(fins, fout):
     mergedObject.write(fout)
     return
 # END
+
+
 ################################ RANGES FUNCTIONS ###############################
 def mergeRanges(ranges):
     """
@@ -387,6 +386,297 @@ def findoverlaps(r1, r2):
     # df columns: [chr, start, end, ....]
     pass
 # END
+
+
+
+################################### Plotting ###################################
+def plthist(args):
+    import sys
+    import warnings
+    if args.f == 'STDIN': fin = sys.stdin
+    else:
+        try:
+            fin = open(args.f, 'r')
+        except FileNotFoundError:
+            raise FileNotFoundError(' Cannot open file: {}'.format(args.f))
+            sys.exit()
+
+    # Read data
+    data = {}
+    for line in fin:
+        line = line.strip().split()
+        if len(line) > 2: raise warnings.warn('Input has more than 2 columns. Using the first two columns')
+        try:
+            data[line[1]] = float(line[0])
+        except ValueError:
+            raise ValueError('First column contains non numerical values')
+            sys.exit()
+    # Check if keys are numeric
+    num = True
+    for k in data.keys():
+        try:
+            a = float(k)
+        except ValueError:
+            num = False
+            break
+    # print(num)
+    if num:
+        if args.xlim is not None:
+            MIN, MAX = args.xlim[0], args.xlim[1]
+            pltdata = {float(k): v for k, v in data.items() if float(k) <= MAX and float(k) >= MIN}
+        else :
+            pltdata = {float(k): v for k, v in data.items()}
+            MIN = min(list(pltdata.keys()))
+            MAX = max(list(pltdata.keys()))
+        pltdata2 = {}
+        m = MIN
+        n = (MAX - MIN)/args.n
+        for i in range(args.n):
+            pltdata2[(m, m+n)] = 0
+            m +=n
+        for k, v in pltdata.items():
+            for k2 in pltdata2.keys():
+                if k >= k2[0] and k <k2[1]:
+                    pltdata2[k2] += v
+
+        pltdata = {(k[0]+k[1])/2 : v for k, v in pltdata2.items()}
+    else:
+        pltdata = data
+
+    sort_k = sorted(list(pltdata.keys()))
+    # print(pltdata)
+    from matplotlib import use as mpuse
+    mpuse('agg')
+    from matplotlib import pyplot as plt
+    fig = plt.figure(figsize=[args.W, args.H])
+    ax = fig.add_subplot()
+    if num:
+        ax.bar(sort_k, [int(pltdata[k]) for k in sort_k], width=n)
+    else:
+        ax.bar(sort_k, [int(pltdata[k]) for k in sort_k])
+    ax.set_xlabel(' '.join(args.x))
+    ax.set_ylabel(' '.join(args.y))
+    if args.t is not None: ax.set_title(args.t)
+    if args.xlog: ax.set_xscale('log')
+    if args.ylog: ax.set_yscale('log')
+    if args.xlim is not None: ax.set_xlim([args.xlim[0], args.xlim[1]])
+    if args.ylim is not None: ax.set_ylim([args.ylim[0], args.ylim[1]])
+    ax.minorticks_on()
+    ax.xaxis.grid(True, which='both', linestyle='--')
+    ax.yaxis.grid(True, which='both', linestyle='--')
+    ax.set_axisbelow(True)
+    plt.tight_layout()
+    plt.savefig(args.o.name)
+    fin.close()
+# END
+
+
+def pltbar(args):
+    '''
+    Generate a bar plot for the input. First column needs to be features, second
+    column values
+    '''
+    import sys
+    import warnings
+    from collections import OrderedDict
+    logger = mylogger("pltbar")
+    if args.f == 'STDIN': fin = sys.stdin
+
+    else:
+        try:
+            fin = open(args.f, 'r')
+        except FileNotFoundError:
+            logger.error('Cannot open file: {}'.format(args.f))
+            sys.exit()
+
+    # Read data
+    data = OrderedDict()
+    for line in fin:
+        line = line.strip().split()
+        if len(line) > 2:
+            logger.warning('Input has more than 2 columns. Using the first two columns')
+        try:
+            data[line[0]] = float(line[1])
+        except ValueError:
+            logger.error('Second column contains non numerical values. Exiting.')
+            sys.exit()
+    pltdata = data
+    if args.sx: keys = sorted(list(pltdata.keys()))
+    elif args.sy: keys = sorted(list(pltdata.keys()), key=lambda x: pltdata[x])
+    else: keys = list(pltdata.keys())
+
+    from matplotlib import use as mpuse
+    mpuse('agg')
+    from matplotlib import pyplot as plt
+    fig = plt.figure(figsize=[args.W, args.H])
+    ax = fig.add_subplot()
+    ax.bar(keys, [int(pltdata[k]) for k in keys])
+
+    ax.set_xlabel(' '.join(args.x))
+    ax.set_ylabel(' '.join(args.y))
+    if args.t is not None: ax.set_title(args.t)
+    # if args.xlog: ax.set_xscale('log')
+    if args.ylog: ax.set_yscale('log')
+    # if args.xlim is not None: ax.set_xlim([args.xlim[0], args.xlim[1]])
+    if args.ylim is not None: ax.set_ylim([args.ylim[0], args.ylim[1]])
+    ax.minorticks_on()
+    ax.xaxis.grid(True, which='both', linestyle='--')
+    ax.yaxis.grid(True, which='both', linestyle='--')
+    ax.set_axisbelow(True)
+    plt.tight_layout()
+    plt.savefig(args.o.name)
+    fin.close()
+# END
+
+
+def plotal(args):
+    """
+    Input file format:
+    genome1:chr1:start-end  genome2:chr2:start-end  Colour
+    1:1:2-15        2:1:1-14        #006c66
+    2:1:1-14        3:1:3-16        #006c66
+    3:1:3-16        4:1:1-14        #006c66
+
+    :param args:
+    :return:
+    """
+
+    from collections import deque
+    import pandas as pd
+    from matplotlib import pyplot as plt
+    from matplotlib.pyplot import get_cmap
+    import matplotlib
+
+    finname = args.align.name
+    out = args.out.name
+    DPI = args.D
+
+    als = deque()
+    # Read alignments
+    with open(finname, 'r') as fin:
+        for line in fin:
+            if line[0] == '#': continue
+            line = line.strip().split()
+            if len(line) == 0: continue
+            s = line[0].split(':')
+            s += s[2].split('-')
+            s.pop(2)
+            e = line[1].split(':')
+            e += e[2].split('-')
+            e.pop(2)
+            als.append(s + e + [line[2]])
+    als = pd.DataFrame(als)
+    als[[2, 3, 6, 7]] = als[[2, 3, 6, 7]].astype(int)
+
+    ngen = len(set(pd.concat([als[0], als[4]])))
+    gdict = dict(zip(pd.unique(pd.concat([als[0], als[4]])), range(ngen-1, -1, -1)))
+    maxp = als[[2, 3, 6, 7]].max().max()
+
+    fig = plt.figure(figsize=[5, 4])
+    ax = fig.add_subplot()
+    ax.set_ylim([-0.1, ngen - 1 + 0.1])
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.axes.xaxis.set_visible(False)
+    ax.axes.yaxis.set_visible(False)
+
+
+    if ngen <= 10:
+        CHRCOLS = [matplotlib.colors.to_hex(get_cmap('tab10')(i)) for i in range(ngen)]
+    else:
+        CHRCOLS = [matplotlib.colors.to_hex(get_cmap('gist_rainbow')(int(255/ngen) * i)) for i in range(0, ngen)]
+        if ngen % 2 != 0:
+            m = CHRCOLS[int((ngen/2) + 1)]
+            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i +ngen/2)]]] + [m]
+        else:
+            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i +ngen/2)]]]
+
+
+    for i in range(ngen):
+        ax.hlines(ngen - 1 - i, 1, maxp,
+                  color=CHRCOLS[i],
+                  linewidth=5,
+                  zorder=2)
+
+    # print(gdict)
+    for al in als.itertuples(index=False):
+        # zorder = 0 if abs(gdict[al[0]] - gdict[al[4]]) == 1 else 3
+        ax.add_patch(bezierpath(al[2], al[3], al[6], al[7], gdict[al[0]], gdict[al[4]], False, al[8], 1))
+    plt.tight_layout(pad=0, h_pad=0, w_pad=0)
+    plt.savefig(out, dpi=DPI)
+    plt.close()
+# END
+
+
+def bezierpath(rs, re, qs, qe, ry, qy, v, col, alpha, label='', lw=0, zorder=0):
+    import matplotlib.patches as patches
+    from matplotlib.path import Path
+    smid = (qs-rs)/2    # Start increment
+    emid = (qe-re)/2    # End increment
+    hmid = (qy-ry)/2    # Height increment
+    if not v:
+        verts = [(rs, ry),
+                 (rs, ry+hmid),
+                 (rs+2*smid, ry+hmid),
+                 (rs+2*smid, ry+2*hmid),
+                 (qe, qy),
+                 (qe, qy-hmid),
+                 (qe-2*emid, qy-hmid),
+                 (qe-2*emid, qy-2*hmid),
+                 (rs, ry),
+                 ]
+    else:
+        verts = [(ry, rs),
+                 (ry+hmid, rs),
+                 (ry+hmid, rs+2*smid),
+                 (ry+2*hmid, rs+2*smid),
+                 (qy, qe),
+                 (qy-hmid, qe),
+                 (qy-hmid, qe-2*emid),
+                 (qy-2*hmid, qe-2*emid),
+                 (ry, rs),
+                 ]
+    codes = [
+        Path.MOVETO,
+        Path.CURVE4,
+        Path.CURVE4,
+        Path.CURVE4,
+        Path.LINETO,
+        Path.CURVE4,
+        Path.CURVE4,
+        Path.CURVE4,
+        Path.CLOSEPOLY,
+    ]
+    path = Path(verts, codes)
+    patch = patches.PathPatch(path, facecolor=col, lw=lw, alpha=alpha, label=label, edgecolor=col, zorder=zorder)
+    return patch
+# END
+
+
+def plotdensity(data):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from scipy.stats import gaussian_kde
+    density = gaussian_kde(data)
+    xs = np.linspace(min(data), max(data), 1000)
+    density.covariance_factor = lambda: .2
+    density._compute_covariance()
+    plt.plot(xs, density(xs))
+    plt.show()
+# END
+
+
+def getColors(colorPalette, numOfCol):
+    return([colorPalette(i/numOfCol) for i in range(numOfCol)])
+# END
+
+
+############################# Other ############################################
+
+
+
 
 
 def pminf(array):
@@ -566,23 +856,6 @@ def getValues(l, index):
 # END
 
 
-def getColors(colorPalette, numOfCol):
-    return([colorPalette(i/numOfCol) for i in range(numOfCol)])
-# END
-
-
-def plotdensity(data):
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from scipy.stats import gaussian_kde
-    density = gaussian_kde(data)
-    xs = np.linspace(min(data), max(data), 1000)
-    density.covariance_factor = lambda: .2
-    density._compute_covariance()
-    plt.plot(xs, density(xs))
-    plt.show()
-# END
-
 
 def sublist(lst1, lst2):
     import operator as op
@@ -629,7 +902,11 @@ def view(d, n=5):
 # END
 
 
-############################# APIs #############################################
+
+############################## API #############################################
+
+
+############################## CLI #############################################
 
 
 
@@ -1024,89 +1301,6 @@ def getasstat(args):
         fout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format("assemble_id", "assembly_length", "number_of_contig", "longest_contig", "shortest_contig", "N50", "L50"))
         for i in range(len(fins)):
             fout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(fins[i], n50_values[i][0], n50_values[i][1], n50_values[i][2], n50_values[i][3], n50_values[i][4], n50_values[i][5]))
-# END
-
-
-def plthist(args):
-    import sys
-    import warnings
-    if args.f == 'STDIN': fin = sys.stdin
-    else:
-        try:
-            fin = open(args.f, 'r')
-        except FileNotFoundError:
-            raise FileNotFoundError(' Cannot open file: {}'.format(args.f))
-            sys.exit()
-  
-  # Read data
-    data = {}
-    for line in fin:
-        line = line.strip().split()
-        if len(line) > 2: raise warnings.warn('Input has more than 2 columns. Using the first two columns')
-        try:
-            data[line[1]] = float(line[0])
-        except ValueError:
-            raise ValueError('First column contains non numerical values')
-            sys.exit()
-  # Check if keys are numeric
-    num = True
-    for k in data.keys():
-        try:
-            a = float(k)
-        except ValueError:
-            num = False
-            break
-    # print(num)
-    if num:
-        if args.xlim is not None:
-            MIN, MAX = args.xlim[0], args.xlim[1]
-            pltdata = {float(k): v for k, v in data.items() if float(k) <= MAX and float(k) >= MIN}
-        else :
-            pltdata = {float(k): v for k, v in data.items()}
-            MIN = min(list(pltdata.keys()))
-            MAX = max(list(pltdata.keys()))
-        pltdata2 = {}
-        m = MIN
-        n = (MAX - MIN)/args.n
-        for i in range(args.n):
-            pltdata2[(m, m+n)] = 0
-            m +=n
-        for k, v in pltdata.items():
-            for k2 in pltdata2.keys():
-                if k >= k2[0] and k <k2[1]:
-                    pltdata2[k2] += v
-        
-        pltdata = {(k[0]+k[1])/2 : v for k, v in pltdata2.items()}
-    else:
-        pltdata = data
-
-    sort_k = sorted(list(pltdata.keys()))
-    # print(pltdata)
-    from matplotlib import use as mpuse
-    mpuse('agg')
-    from matplotlib import pyplot as plt
-    fig = plt.figure(figsize=[args.W, args.H])
-    ax = fig.add_subplot()
-    if num:
-        ax.bar(sort_k, [int(pltdata[k]) for k in sort_k], width=n)
-    else:
-        ax.bar(sort_k, [int(pltdata[k]) for k in sort_k])
-    ax.set_xlabel(' '.join(args.x))
-    ax.set_ylabel(' '.join(args.y))
-    if args.t is not None: ax.set_title(args.t)
-    if args.xlog: ax.set_xscale('log')
-    if args.ylog: ax.set_yscale('log')
-    if args.xlim is not None: ax.set_xlim([args.xlim[0], args.xlim[1]])
-    if args.ylim is not None: ax.set_ylim([args.ylim[0], args.ylim[1]])
-    ax.minorticks_on()
-    ax.xaxis.grid(True, which='both', linestyle='--')
-    ax.yaxis.grid(True, which='both', linestyle='--')
-    ax.set_axisbelow(True)
-    plt.tight_layout()
-    plt.savefig(args.o.name)
-    fin.close()
-# END
-
 
 def gfftrans(args):
     print('WARNING: THIS FUNCTION MIGHT HAVE BUGS.')
@@ -1758,132 +1952,6 @@ def mapbp(args):
 # END
 
 
-def plotal(args):
-    """
-    Input file format:
-    genome1:chr1:start-end  genome2:chr2:start-end  Colour
-    1:1:2-15        2:1:1-14        #006c66
-    2:1:1-14        3:1:3-16        #006c66
-    3:1:3-16        4:1:1-14        #006c66
-
-    :param args:
-    :return:
-    """
-
-    from collections import deque
-    import pandas as pd
-    from matplotlib import pyplot as plt
-    from matplotlib.pyplot import get_cmap
-    import matplotlib
-
-    finname = args.align.name
-    out = args.out.name
-    DPI = args.D
-
-    als = deque()
-    # Read alignments
-    with open(finname, 'r') as fin:
-        for line in fin:
-            if line[0] == '#': continue
-            line = line.strip().split()
-            if len(line) == 0: continue
-            s = line[0].split(':')
-            s += s[2].split('-')
-            s.pop(2)
-            e = line[1].split(':')
-            e += e[2].split('-')
-            e.pop(2)
-            als.append(s + e + [line[2]])
-    als = pd.DataFrame(als)
-    als[[2, 3, 6, 7]] = als[[2, 3, 6, 7]].astype(int)
-
-    ngen = len(set(pd.concat([als[0], als[4]])))
-    gdict = dict(zip(pd.unique(pd.concat([als[0], als[4]])), range(ngen-1, -1, -1)))
-    maxp = als[[2, 3, 6, 7]].max().max()
-
-    fig = plt.figure(figsize=[5, 4])
-    ax = fig.add_subplot()
-    ax.set_ylim([-0.1, ngen - 1 + 0.1])
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.spines['bottom'].set_visible(False)
-    ax.axes.xaxis.set_visible(False)
-    ax.axes.yaxis.set_visible(False)
-
-
-    if ngen <= 10:
-        CHRCOLS = [matplotlib.colors.to_hex(get_cmap('tab10')(i)) for i in range(ngen)]
-    else:
-        CHRCOLS = [matplotlib.colors.to_hex(get_cmap('gist_rainbow')(int(255/ngen) * i)) for i in range(0, ngen)]
-        if ngen % 2 != 0:
-            m = CHRCOLS[int((ngen/2) + 1)]
-            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i +ngen/2)]]] + [m]
-        else:
-            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i +ngen/2)]]]
-
-
-    for i in range(ngen):
-        ax.hlines(ngen - 1 - i, 1, maxp,
-                     color=CHRCOLS[i],
-                     linewidth=5,
-                     zorder=2)
-
-    # print(gdict)
-    for al in als.itertuples(index=False):
-        # zorder = 0 if abs(gdict[al[0]] - gdict[al[4]]) == 1 else 3
-        ax.add_patch(bezierpath(al[2], al[3], al[6], al[7], gdict[al[0]], gdict[al[4]], False, al[8], 1))
-    plt.tight_layout(pad=0, h_pad=0, w_pad=0)
-    plt.savefig(out, dpi=DPI)
-    plt.close()
-# END
-
-
-def bezierpath(rs, re, qs, qe, ry, qy, v, col, alpha, label='', lw=0, zorder=0):
-    import matplotlib.patches as patches
-    from matplotlib.path import Path
-    smid = (qs-rs)/2    # Start increment
-    emid = (qe-re)/2    # End increment
-    hmid = (qy-ry)/2    # Height increment
-    if not v:
-        verts = [(rs, ry),
-                 (rs, ry+hmid),
-                 (rs+2*smid, ry+hmid),
-                 (rs+2*smid, ry+2*hmid),
-                 (qe, qy),
-                 (qe, qy-hmid),
-                 (qe-2*emid, qy-hmid),
-                 (qe-2*emid, qy-2*hmid),
-                 (rs, ry),
-                 ]
-    else:
-        verts = [(ry, rs),
-                 (ry+hmid, rs),
-                 (ry+hmid, rs+2*smid),
-                 (ry+2*hmid, rs+2*smid),
-                 (qy, qe),
-                 (qy-hmid, qe),
-                 (qy-hmid, qe-2*emid),
-                 (qy-2*hmid, qe-2*emid),
-                 (ry, rs),
-                 ]
-    codes = [
-        Path.MOVETO,
-        Path.CURVE4,
-        Path.CURVE4,
-        Path.CURVE4,
-        Path.LINETO,
-        Path.CURVE4,
-        Path.CURVE4,
-        Path.CURVE4,
-        Path.CLOSEPOLY,
-    ]
-    path = Path(verts, codes)
-    patch = patches.PathPatch(path, facecolor=col, lw=lw, alpha=alpha, label=label, edgecolor=col, zorder=zorder)
-    return patch
-# END
-
-
 def fachrid(args):
     fa = args.fa.name
     out = args.out.name
@@ -2212,54 +2280,90 @@ def syriidx(args):
 # END
 
 
+def hyellow(s):
+    return('\033[33m' + s + '\033[39m')
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Collections of command-line functions to perform common pre-processing and analysis functions.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     subparsers = parser.add_subparsers()
-    parser_getchr  = subparsers.add_parser("getchr", help="Get specific chromosomes from the fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_sampfa  = subparsers.add_parser("sampfa", help="Sample random sequences from a fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_exseq = subparsers.add_parser("exseq", help="extract sequence from fasta", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_getscaf = subparsers.add_parser("getscaf", help="generate scaffolds from a given genome", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_seqsize = subparsers.add_parser("seqsize", help="get size of dna sequences in a fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_filsize = subparsers.add_parser("filsize", help="filter out smaller molecules", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_subnuc = subparsers.add_parser("subnuc", help="Change character (in all sequences) in the fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_basrat = subparsers.add_parser("basrat", help="Calculate the ratio of every base in the genome", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_genome_ranges = subparsers.add_parser("genome_ranges", help="Get a list of genomic ranges of a given size", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_get_homopoly = subparsers.add_parser("get_homopoly", help="Find homopolymeric regions in a given fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_n50 = subparsers.add_parser("asstat", help="Get N50 values for the given list of chromosomes", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_plthist = subparsers.add_parser("plthist", help="Takes frequency output (like from uniq -c) and generates a histogram plot", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_gfftrans = subparsers.add_parser("gfftrans", help="Get transcriptome (gene sequence) for all genes in a gff file. WARNING: THIS FUNCTION MIGHT HAVE BUGS.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_vcfdp = subparsers.add_parser("vcfdp", help="Get DP and DP4 values from a VCF file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_gffsort = subparsers.add_parser("gffsort", help="Sort a GFF file based on the gene start positions", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_getcol = subparsers.add_parser("getcol", help="Select columns from a TSV or CSV file using column names", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_bamcov = subparsers.add_parser("bamcov", help="Get mean read-depth for chromosomes from a BAM file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_pbamrc = subparsers.add_parser("pbamrc", help="Run bam-readcount in a parallel manner by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    # parser_parallel = subparsers.add_parser("parallel", help="Run bam-readcount in a parallel manner by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_ppileup = subparsers.add_parser("ppileup", help="Currently it is slower than just running mpileup on 1 CPU. Might be possible to optimize later. Run samtools mpileup in parallel when pileup is required for specific positions by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_splitbam = subparsers.add_parser("splitbam", help="Split a BAM files based on TAG value. BAM file must be sorted using the TAG.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    ## FASTA Commands
+    parser_getchr = subparsers.add_parser("getchr", help=hyellow("FASTA: Get specific chromosomes from the fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_sampfa  = subparsers.add_parser("sampfa", help=hyellow("FASTA: Sample random sequences from a fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_exseq = subparsers.add_parser("exseq", help= hyellow("FASTA: extract sequence from fasta"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_getscaf = subparsers.add_parser("getscaf", help=hyellow("FASTA: generate scaffolds from a given genome"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_seqsize = subparsers.add_parser("seqsize", help=hyellow("FASTA: get size of dna sequences in a fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_filsize = subparsers.add_parser("filsize", help=hyellow("FASTA: filter out smaller molecules"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_subnuc = subparsers.add_parser("subnuc", help=hyellow("FASTA: Change character (in all sequences) in the fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_basrat = subparsers.add_parser("basrat", help=hyellow("FASTA: Calculate the ratio of every base in the genome"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_genome_ranges = subparsers.add_parser("genome_ranges", help=hyellow("FASTA: Get a list of genomic ranges of a given size"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_get_homopoly = subparsers.add_parser("get_homopoly", help=hyellow("FASTA: Find homopolymeric regions in a given fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_n50 = subparsers.add_parser("asstat", help=hyellow("FASTA: Get N50 values for the given list of chromosomes"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_shannon = subparsers.add_parser("shannon", help=hyellow("FASTA: Get Shanon entropy across the length of the chromosomes using sliding windows"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_fachrid = subparsers.add_parser("fachrid", help=hyellow("FASTA: Change chromosome IDs"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_faline = subparsers.add_parser("faline", help=hyellow("FASTA: Convert fasta file from single line to multi line or vice-versa"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    ## BAM
+    parser_bamcov = subparsers.add_parser("bamcov", help="BAM: Get mean read-depth for chromosomes from a BAM file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_pbamrc = subparsers.add_parser("pbamrc", help="BAM: Run bam-readcount in a parallel manner by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_splitbam = subparsers.add_parser("splitbam", help="BAM: Split a BAM files based on TAG value. BAM file must be sorted using the TAG.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_mapbp = subparsers.add_parser("mapbp", help="BAM: For a given reference coordinate get the corresponding base and position in the reads/segments mapping the reference position", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_bam2coords = subparsers.add_parser("bam2coords", help="BAM: Convert BAM/SAM file to alignment coords", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_ppileup = subparsers.add_parser("ppileup", help="BAM: Currently it is slower than just running mpileup on 1 CPU. Might be possible to optimize later. Run samtools mpileup in parallel when pileup is required for specific positions by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    ## syri
+    parser_runsyri = subparsers.add_parser("runsyri", help=hyellow("syri: Parser to align and run syri on two genomes"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_syriidx = subparsers.add_parser("syriidx", help=hyellow("syri: Generates index for syri.out. Filters non-SR annotations, then bgzip, then tabix index"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    ## Plotting
+    parser_plthist = subparsers.add_parser("plthist", help="Plot: Takes frequency output (like from uniq -c) and generates a histogram plot", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_plotal = subparsers.add_parser("plotal", help="Plot: Visualise pairwise-whole genome alignments between multiple genomes", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_plotbar = subparsers.add_parser("pltbar", help="Plot: Generate barplot. Input: a two column file with first column as features and second column as values", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    ## Assembly graphs
+    parser_asmreads = subparsers.add_parser("asmreads", help=hyellow("GFA: For a given genomic region, get reads that constitute the corresponding assembly graph"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_gfatofa = subparsers.add_parser("gfatofa", help=hyellow("GFA: Convert a gfa file to a fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    ## GFF
+    parser_gfftrans = subparsers.add_parser("gfftrans", help="GFF: Get transcriptome (gene sequence) for all genes in a gff file. WARNING: THIS FUNCTION MIGHT HAVE BUGS.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_gffsort = subparsers.add_parser("gffsort", help="GFF: Sort a GFF file based on the gene start positions", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    ## VCF
+    parser_vcfdp = subparsers.add_parser("vcfdp", help=hyellow("VCF: Get DP and DP4 values from a VCF file."), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    ## Tables
+    parser_getcol = subparsers.add_parser("getcol", help="Table:Select columns from a TSV or CSV file using column names", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # TODO: Add functionality for sampling rows
-    parser_samplerow = subparsers.add_parser("smprow", help="Select random rows from a text file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_gfatofa = subparsers.add_parser("gfatofa", help="Convert a gfa file to a fasta file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_faline = subparsers.add_parser("faline", help="Convert fasta file from single line to multi line or vice-versa", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_shannon = subparsers.add_parser("shannon", help="Get Shanon entropy across the length of the chromosomes using sliding windows", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_asmreads = subparsers.add_parser("asmreads", help="For a given genomic region, get reads that constitute the corresponding assembly graph", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_mapbp = subparsers.add_parser("mapbp", help="For a given reference coordinate get the corresponding base and position in the reads/segments mapping the reference position", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_plotal = subparsers.add_parser("plotal", help="Visualise pairwise-whole genome alignments between multiple genomes", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_fachrid = subparsers.add_parser("fachrid", help="Change chromosome IDs", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_runsyri = subparsers.add_parser("runsyri", help="Parser to align and run syri on two genomes", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_bam2coords = subparsers.add_parser("bam2coords", help="Convert BAM/SAM file to alignment coords", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_syriidx = subparsers.add_parser("syriidx", help="Generates index for syri.out. Filters non-SR annotations, then bgzip, then tabix index", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_samplerow = subparsers.add_parser("smprow", help="Table:Select random rows from a text file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
 
+    # plotbar
+    parser_plotbar.set_defaults(func=pltbar)
+    parser_plotbar.add_argument("-f", help="Input file containing the frequency data", type=str, default='STDIN')
+    parser_plotbar.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default='bar.pdf')
+    parser_plotbar.add_argument("-W", help="width of the plot (in inches)", type=float, default=4)
+    parser_plotbar.add_argument("-H", help="height of the plot (in inches)", type=float, default=4)
+    parser_plotbar.add_argument("-x", help="X-axis label", type=str, default='feature', nargs='+')
+    parser_plotbar.add_argument("-y", help="Y-axis label", type=str, default='value', nargs='+')
+    parser_plotbar_sort = parser_plotbar.add_mutually_exclusive_group()
+    parser_plotbar_sort.add_argument("--sx", help="Sort features", default=False, action='store_true')
+    parser_plotbar_sort.add_argument("--sy", help="Sort values", default=False, action='store_true')
+    # parser_plotbar.add_argument("-xlog", help="X-axis on log scale", default=False, action='store_true')
+    parser_plotbar.add_argument("--ylog", help="Y-axis on log scale", default=False, action='store_true')
+    # parser_plotbar.add_argument("-xlim", help="Set X-axis limit for numerical data", nargs=2, type=int)
+    parser_plotbar.add_argument("--ylim", help="Set Y-axis limit for numerical data", nargs=2, type=int)
+    parser_plotbar.add_argument("-t", help="title of the plot", type=str, default=None)
+    # parser_plotbar.add_argument("-n", help="Number of bins", type=int, default=100)
+
+
     # syriidx
     parser_syriidx.set_defaults(func=syriidx)
     parser_syriidx.add_argument("syriout", help='syri output file', type=argparse.FileType('r'))
     parser_syriidx.add_argument("-f", help='Only output syntenic and SR regions.', default=False, action='store_true')
     parser_syriidx.add_argument("--notal", help='Also include reference NOTAL regions', default=False, action='store_true')
-
 
 
     # bam2coords
