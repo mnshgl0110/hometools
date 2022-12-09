@@ -152,40 +152,6 @@ def readfaidxbed(f):
 
 ############################# Other ############################################
 
-def setlogconfig(lg):
-    """
-    :param lg: Log-level 
-    :return: 
-    """
-    import logging.config
-    logging.config.dictConfig({
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {
-            'log_file': {
-                'format': "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s",
-            },
-            'stdout': {
-                'format': "%(name)s - %(levelname)s - %(message)s",
-            },
-        },
-        'handlers': {
-            'stdout': {
-                'class': 'logging.StreamHandler',
-                'formatter': 'stdout',
-                'level': 'WARNING',
-            },
-        },
-        'loggers': {
-            '': {
-                'level': lg,
-                'handlers': ['stdout'],
-                # 'handlers': ['stdout', 'log_file'],
-            },
-        },
-    })
-#END
-
 
 ############################# CIGAR ############################################
 
@@ -258,6 +224,52 @@ def cgwalk(cg, n, ngen='r'):
     raise ValueError("n is larger than the number of bases covered by cigartuple")
 # END
 
+############################# logging ##########################################
+def setlogconfig(lg):
+    """
+    :param lg: Log-level
+    :return:
+    """
+    import logging.config
+    logging.config.dictConfig({
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'log_file': {
+                'format': "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s",
+            },
+            'stdout': {
+                'format': "%(name)s - %(levelname)s - %(message)s",
+            },
+        },
+        'handlers': {
+            'stdout': {
+                'class': 'logging.StreamHandler',
+                'formatter': 'stdout',
+                'level': 'WARNING',
+            },
+        },
+        'loggers': {
+            '': {
+                'level': lg,
+                'handlers': ['stdout'],
+                # 'handlers': ['stdout', 'log_file'],
+            },
+        },
+    })
+#END
+
+def mylogger(logname):
+    import logging
+    logger = logging.getLogger("syriidx")
+    handler = logging.StreamHandler()
+    handler.setFormatter(CustomFormatter())
+    logger.addHandler(handler)
+    logging.basicConfig(level=logging.INFO)
+    logger.propagate = False
+    return logger
+# END
+
 
 ############################# UTIL #############################################
 def randomstring(l):
@@ -270,6 +282,18 @@ def randomstring(l):
     return ''.join(choices(letters, k=l))
 # END
 
+def mergepdf(fins, fout):
+    """
+    Merge given PDF files in fins and save the combined file in fout.
+    """
+    from PyPDF2 import PdfFileMerger, PdfFileReader
+    # Call the PdfFileMerger
+    mergedObject = PdfFileMerger()
+    for fin in fins: mergedObject.append(PdfFileReader(fin, 'rb'))
+    # Write all the files into a file which is named as shown below
+    mergedObject.write(fout)
+    return
+# END
 ################################ RANGES FUNCTIONS ###############################
 def mergeRanges(ranges):
     """
@@ -362,20 +386,6 @@ def findoverlaps(r1, r2):
     #   print(b)
     # df columns: [chr, start, end, ....]
     pass
-# END
-
-
-def mergepdf(fins, fout):
-    """
-    Merge given PDF files in fins and save the combined file in fout.
-    """
-    from PyPDF2 import PdfFileMerger, PdfFileReader
-    # Call the PdfFileMerger
-    mergedObject = PdfFileMerger()
-    for fin in fins: mergedObject.append(PdfFileReader(fin, 'rb'))
-    # Write all the files into a file which is named as shown below
-    mergedObject.write(fout)
-    return
 # END
 
 
@@ -737,7 +747,7 @@ def subnuc(args):
         fout = fasta+"_edited"
     else:
         fout = args.o
-    with open(fout,"w") as f:
+    with open(fout, "w") as f:
         spacer = ""
         for seq in querySeq:
             f.write(spacer)
@@ -1327,7 +1337,7 @@ def pbamrc(args):
     split_N = bed.shape[0] if args.S else N
     splits = np.array_split(range(bed.shape[0]), split_N)
     tmp_df = [bed.iloc[i] for i in splits]
-    pre = str(time()).replace(".", "")
+    pre = str(time()).replace(".", "") + str(np.random.randint(1000000000))
     for i in range(split_N):
         tmp_df[i].to_csv(str(pre)+'_'+str(i)+".bed", sep='\t', header=False, index=False)
 
@@ -1873,6 +1883,7 @@ def bezierpath(rs, re, qs, qe, ry, qy, v, col, alpha, label='', lw=0, zorder=0):
     return patch
 # END
 
+
 def fachrid(args):
     fa = args.fa.name
     out = args.out.name
@@ -2163,13 +2174,14 @@ def bam2coords(args):
 def syriidx(args):
     # syriidx
     from subprocess import Popen, PIPE
-    import logging
-    logger = logging.getLogger("syriidx")
-    handler = logging.StreamHandler()
-    handler.setFormatter(CustomFormatter())
-    logger.addHandler(handler)
-    logging.basicConfig(level=logging.INFO)
-    logger.propagate = False
+    logger = mylogger("syriidx")
+    # import logging
+    # logger = logging.getLogger("syriidx")
+    # handler = logging.StreamHandler()
+    # handler.setFormatter(CustomFormatter())
+    # logger.addHandler(handler)
+    # logging.basicConfig(level=logging.INFO)
+    # logger.propagate = False
 
     fin = args.syriout.name
     notal = args.notal
