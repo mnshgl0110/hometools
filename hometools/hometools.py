@@ -14,7 +14,6 @@ import argparse
 import os
 import sys
 
-from classes import Cigar, CustomFormatter
 class Namespace:
     """
     Use this to create args object for parsing to functions
@@ -257,6 +256,7 @@ def setlogconfig(lg):
 # END
 
 def mylogger(logname):
+    from hometools.scripts.classes import CustomFormatter
     import logging
     logger = logging.getLogger("syriidx")
     handler = logging.StreamHandler()
@@ -2244,13 +2244,6 @@ def syriidx(args):
     # syriidx
     from subprocess import Popen, PIPE
     logger = mylogger("syriidx")
-    # import logging
-    # logger = logging.getLogger("syriidx")
-    # handler = logging.StreamHandler()
-    # handler.setFormatter(CustomFormatter())
-    # logger.addHandler(handler)
-    # logging.basicConfig(level=logging.INFO)
-    # logger.propagate = False
 
     fin = args.syriout.name
     notal = args.notal
@@ -2284,7 +2277,8 @@ def syriidx(args):
 def hyellow(s):
     return('\033[33m' + s + '\033[39m')
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
+def main(cmd):
     parser = argparse.ArgumentParser("Collections of command-line functions to perform common pre-processing and analysis functions.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     subparsers = parser.add_subparsers()
     ## FASTA Commands
