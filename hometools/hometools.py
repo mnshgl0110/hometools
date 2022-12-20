@@ -255,10 +255,11 @@ def setlogconfig(lg):
     })
 # END
 
+
 def mylogger(logname):
     from hometools.classes import CustomFormatter
     import logging
-    logger = logging.getLogger("syriidx")
+    logger = logging.getLogger(logname)
     handler = logging.StreamHandler()
     handler.setFormatter(CustomFormatter())
     logger.addHandler(handler)
@@ -785,9 +786,6 @@ def getColors(colorPalette, numOfCol):
 ############################# Other ############################################
 
 
-
-
-
 def pminf(array):
     x = 1
     pmin_list = []
@@ -839,6 +837,7 @@ def order(*args):
 
 def p_adjust(*args):
     """
+    Takes list of values and do multiple hypothesis adjustment
     copied from
     https://rosettacode.org/wiki/P-value_correction#Python
 
@@ -2376,7 +2375,8 @@ def syriidx(args):
     o = p.communicate()
     if o[1] != b'':
         sys.exit("Error in bgzip:\n{}".format(o[1].decode()))
-    logger.info("Indexing annotations")
+    logger.warning("Indexing annotations")
+
     p = Popen(f"tabix -fp bed {outfin}.gz".split(), stdout=PIPE, stderr=PIPE)
     o = p.communicate()
     if o[1] != b'':
