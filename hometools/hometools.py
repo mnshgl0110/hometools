@@ -2375,7 +2375,7 @@ def syriidx(args):
     o = p.communicate()
     if o[1] != b'':
         sys.exit("Error in bgzip:\n{}".format(o[1].decode()))
-    logger.warning("Indexing annotations")
+    logger.info("Indexing annotations")
 
     p = Popen(f"tabix -fp bed {outfin}.gz".split(), stdout=PIPE, stderr=PIPE)
     o = p.communicate()
