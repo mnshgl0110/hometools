@@ -613,7 +613,6 @@ def plotal(args):
 # END
 
 
-
 def plotref(refidx, varpos, syrireg, figout, bw=100000):
     """
     Plots distribution of bed file on a genome annotated with SRs
@@ -940,8 +939,20 @@ def p_adjust(*args):
             qvalues = [pa[index] for index in ro]
     else:
         print("method {} isn't defined.".format(method))
-        sys.exit()
+        # sys.exit()
     return qvalues
+# END
+
+
+def summary(arr):
+    '''
+    Takes a list or np.array and print summary statistics similar to the summary()
+    function in R
+    '''
+    import numpy as np
+    arr = np.array(arr)
+    print(f'Minimum: {round(np.min(arr), 6)}\n1st Qu.: {round(np.quantile(arr, 0.25), 6)}\nMedian: {round(np.median(arr), 6)}\nMean: {round(np.mean(arr), 6)}\n3rd Qu.: {round(np.quantile(arr, 0.75), 6)}\nMax: {round(np.max(arr), 6)}')
+    return
 # END
 
 
@@ -962,7 +973,6 @@ def getValues(l, index):
     """from list l get the values at indices specified by index"""
     return [l[i] for i in index]
 # END
-
 
 
 def sublist(lst1, lst2):
@@ -2386,7 +2396,7 @@ def syriidx(args):
 
 
 def hyellow(s):
-    return('\033[33m' + s + '\033[39m')
+    return('\033[93m' + s + '\033[39m')
 
 # if __name__ == '__main__':
 def main(cmd):
