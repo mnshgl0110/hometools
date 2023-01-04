@@ -969,7 +969,7 @@ def unlist(nestedList):
 # END
 
 
-def getValues(l, index):
+def getvalues(l, index):
     """from list l get the values at indices specified by index"""
     return [l[i] for i in index]
 # END
@@ -1039,7 +1039,7 @@ def readblast(f):
 
 def density_scatter(x, y, ax=None, fig=None, sort=True, bins=20, **kwargs):
     """
-    
+    This ta
     """
     # TODO: See if this can be converted to a command-line API
     import numpy as np
