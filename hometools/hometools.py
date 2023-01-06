@@ -101,8 +101,6 @@ def writefasta(fa, f):
                 v = v.encode()
             fo.write(b+k+nl)
             fo.write(nl.join([v[i:i+60] for i in range(0, len(v), 60)]) + nl)
-            # for i in range(0, len(v), 60):
-            #     fo.write(v[i:(i+60)]+nl)
 # END
 
 
@@ -270,6 +268,24 @@ def mylogger(logname):
 
 
 ############################# UTIL #############################################
+
+def isgzip(f):
+    '''
+    Checks if a given file is gzipped. Returns true if the is gzipped.
+    '''
+    from gzip import open as gzopen
+    from gzip import BadGzipFile
+    # Test if the file is Gzipped or not
+    with gzopen(f, 'rb') as fin:
+        try:
+            fin.read(1)
+            isgzip = True
+        except BadGzipFile:
+            isgzip = False
+    return isgzip
+# END
+
+
 def randomstring(l):
     """
     l = length of the string
@@ -1006,6 +1022,9 @@ def view(d, n=5):
     # TODO: Make it work properly
     try:
         iter = d.__iter__()
+        # TODO: Add iterable for rows of dataframe
+        # if type(g).__name__ == 'DataFrame':
+
     except AttributeError as e:
         print(f"Object of type: {type(d)} is not iterable. Exiting")
         return
@@ -2111,8 +2130,9 @@ def runsryi(args):
         # Use shell=True so make the pipe work
         proc = Popen(command, shell=True)
         proc.wait()
-        proc = Popen(f'samtools index -@ {N} {alfile}'.split())
-        proc.wait()
+        if altype == 'bam':
+            proc = Popen(f'samtools index -@ {N} {alfile}'.split())
+            proc.wait()
     # Run syri
     proc = Popen(f'syri -c {alfile} -r {ref} -q {qry} -F {altype[0].upper()} --prefix {prefix} --nc {N}'.split())
     proc.wait()
@@ -2397,6 +2417,36 @@ def syriidx(args):
 
 def hyellow(s):
     return('\033[93m' + s + '\033[39m')
+# END
+
+
+def revcompseq(args):
+    import sys
+    # Set inputs
+    logger = mylogger('revcompseq')
+    fasta = args.fasta.name
+    if args.o is None:
+        out = 'revcomp.fasta'
+        logger.warning('Setting output file to revcomp.fasta')
+    else:
+        out = args.o.name
+    # Check for chromosome IDs
+    outfasta = dict()
+    if args.chr is None:
+        logger.error('No sequence ID provided. Exiting.')
+        sys.exit()
+    else:
+        chrids = set(args.chr)
+    # Get reversed complemented fasta
+    for chrom, s in readfasta_iterator(open(fasta, 'r'), isgzip(fasta)):
+        if chrom in chrids:
+            outfasta[chrom] = revcomp(s)
+        else:
+            outfasta[chrom] = s
+    writefasta(outfasta, out)
+    logger.info('Finished')
+# END
+
 
 # if __name__ == '__main__':
 def main(cmd):
@@ -2417,6 +2467,7 @@ def main(cmd):
     parser_shannon = subparsers.add_parser("shannon", help=hyellow("FASTA: Get Shanon entropy across the length of the chromosomes using sliding windows"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_fachrid = subparsers.add_parser("fachrid", help=hyellow("FASTA: Change chromosome IDs"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_faline = subparsers.add_parser("faline", help=hyellow("FASTA: Convert fasta file from single line to multi line or vice-versa"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_revcompseq = subparsers.add_parser("revcompseq", help=hyellow("FASTA: Reverse complement specific chromosomes in a fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     ## BAM
     parser_bamcov = subparsers.add_parser("bamcov", help="BAM: Get mean read-depth for chromosomes from a BAM file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -2451,10 +2502,16 @@ def main(cmd):
     # TODO: Add functionality for sampling rows
     parser_samplerow = subparsers.add_parser("smprow", help="Table:Select random rows from a text file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
+
+    # revcompseq
+    parser_revcompseq.set_defaults(func=revcompseq)
+    parser_revcompseq.add_argument("fasta", help="Input fasta file", type=argparse.FileType('r'))
+    parser_revcompseq.add_argument("--chr", help="Sequence ID to reverse complement", type=str, action='append')
+    parser_revcompseq.add_argument("-o", help="Output file name", type=argparse.FileType('w'))
+
 
     # plotbar
     parser_plotbar.set_defaults(func=pltbar)
