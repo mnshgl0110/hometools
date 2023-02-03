@@ -1113,7 +1113,7 @@ def extractSeq(args):
         if args.o is not None:
             writefasta({seqid: outseq}, args.o.name)
         else:
-            print("> {}\n{}".format(seqid, outseq))
+            print(">{}\n{}".format(seqid, outseq))
     else:
         fin = pd.read_table(args.fin.name, header=None, delim_whitespace=True)[[0, 1, 2]]
         fin.columns = ["chr", "start", "end"]
@@ -1133,7 +1133,7 @@ def extractSeq(args):
             writefasta(out, args.o.name)
         else:
             for c, s in out.items():
-                print("> {}\n{}".format(c, s))
+                print(">{}\n{}".format(c, s))
 # END
 
 
