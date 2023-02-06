@@ -288,18 +288,22 @@ class snvdata:
         self.chr = ls[0]
         self.pos = int(ls[1])
         self.ref = ls[2]
-        self.rc  = int(ls[3])
-        self.indelcount, self.bases = [0, []] if self.rc == 0 else self._getbases(ls[4])
+        self.rc = int(ls[3])
+        self.basestring = ls[4]
+        self.bases, self.indels = [0, []] if self.rc == 0 else self._getbases(ls[4])
         if len(self.bases) != self.rc:
             raise Exception('Number of identified bases if not equals to read count for {}:{}. ReadCount: {}, BaseCount: {}'.format(self.chr, self.pos, self.rc, len(self.bases)))
         self.BQ = [ord(c) - 33 for c in ls[5]]
+        self.indelcount = len(self.indels)
 
     def _getbases(self, l):
         from collections import deque
+        indellist = deque()
         indelcount = 0
         bases = deque()
         skip = 0
         indel = False
+        ind = ''
         for c in l:
             if skip > 0 and indel == False:
                 skip -= 1
@@ -312,7 +316,11 @@ class snvdata:
                 else:
                     indel = False
                     skip -= 1
+                    ind += c
                     continue
+            if ind != '':
+                indellist.append(ind)
+                ind = ''
             if c == '*':
                 # self.indelcount += 1
                 # indelcount += 1
@@ -325,10 +333,11 @@ class snvdata:
                 continue
             if c in ['+', '-']:
                 indel = True
+                ind = c
                 indelcount += 1
                 continue
             bases.append(c)
-        return [indelcount, list(bases)]
+        return [list(bases), list(indellist)]
 
     def forwardcnt(self):
         try:
@@ -352,10 +361,11 @@ class snvdata:
     def getBQ(self, base):
         return [self.BQ[i] for i in range(len(self.bases)) if self.bases[i] == base]
 
-    def getindelreads(self, bases, reads):
+    def getindelreads(self, reads):
         from collections import deque
         self.indelreads = deque()
         reads = reads.split(",")
+        bases = self.basestring
         for i in range(len(reads)):
             if bases[0] == '^':
                 bases == bases[3:]
