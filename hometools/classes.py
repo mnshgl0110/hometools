@@ -368,8 +368,8 @@ class snvdata:
         bases = self.basestring
         for i in range(len(reads)):
             if bases[0] == '^':
-                bases == bases[3:]
-                continue
+                bases = bases[2:]
+                # continue
             if bases[0] == '$':
                 bases = bases[1:]
             if len(bases) == 1:
