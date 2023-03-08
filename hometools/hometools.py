@@ -2458,7 +2458,7 @@ def splitfa(args):
     logger.info(f"Reading {fasta}")
     for chrom, s in readfasta_iterator(open(fasta, 'r'), isgzip(fasta)):
         outname = f'{prefix}{chrom}.fa'
-        logger.info(outname)
+        logger.info(f'Writing {outname}')
         writefasta({chrom: s}, outname)
     logger.info('Finished')
     return
