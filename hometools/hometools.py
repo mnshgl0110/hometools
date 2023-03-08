@@ -279,10 +279,10 @@ def isgzip(f):
     with gzopen(f, 'rb') as fin:
         try:
             fin.read(1)
-            isgzip = True
+            isgz = True
         except BadGzipFile:
-            isgzip = False
-    return isgzip
+            isgz = False
+    return isgz
 # END
 
 
@@ -2448,6 +2448,23 @@ def revcompseq(args):
 # END
 
 
+def splitfa(args):
+    """
+    Takes an input fasta file and splits its chromosomes/sequences. Each chromosome is saved in a separate file.
+    """
+    logger = mylogger('splifa')
+    fasta = args.fasta.name
+    prefix = args.prefix
+    logger.info(f"Reading {fasta}")
+    for chrom, s in readfasta_iterator(open(fasta, 'r'), isgzip(fasta)):
+        outname = f'{prefix}{chrom}.fa'
+        logger.info(outname)
+        writefasta({chrom: s}, outname)
+    logger.info('Finished')
+    return
+# END
+
+
 # if __name__ == '__main__':
 def main(cmd):
     parser = argparse.ArgumentParser("Collections of command-line functions to perform common pre-processing and analysis functions.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -2468,6 +2485,7 @@ def main(cmd):
     parser_fachrid = subparsers.add_parser("fachrid", help=hyellow("FASTA: Change chromosome IDs"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_faline = subparsers.add_parser("faline", help=hyellow("FASTA: Convert fasta file from single line to multi line or vice-versa"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_revcompseq = subparsers.add_parser("revcompseq", help=hyellow("FASTA: Reverse complement specific chromosomes in a fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_splitfa = subparsers.add_parser("splitfa", help=hyellow("FASTA: Split fasta files to individual sequences. Each sequence is saved in a separate file."), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     ## BAM
     parser_bamcov = subparsers.add_parser("bamcov", help="BAM: Get mean read-depth for chromosomes from a BAM file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -2505,6 +2523,11 @@ def main(cmd):
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
+
+    # splitfa
+    parser_splitfa.set_defaults(func=splitfa)
+    parser_splitfa.add_argument("fasta", help="Input fasta file", type=argparse.FileType('r'))
+    parser_splitfa.add_argument("--prefix", help="Prefix to add before file names", type=str, default='')
 
     # revcompseq
     parser_revcompseq.set_defaults(func=revcompseq)
