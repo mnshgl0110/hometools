@@ -3,11 +3,7 @@
 """
 Created on Mon Jun 19 15:36:01 2017
 
-@author: goel
-Usage:
-import sys
-sys.path.insert(0, '/srv/biodata/dep_mercier/grp_schneeberger/software/hometools/')
-from myUsefulFunctions import *
+@author: Manish Goel
 """
 
 import argparse
@@ -295,6 +291,7 @@ def randomstring(l):
     from string import ascii_letters as letters
     return ''.join(choices(letters, k=l))
 # END
+
 
 def mergepdf(fins, fout):
     """
@@ -999,7 +996,8 @@ def sublist(lst1, lst2):
 
 def intersect(*lists):
     import numpy as np
-    return reduce(np.intersect1d,list(lists))
+    from functools import reduce
+    return reduce(np.intersect1d, list(lists))
 # END
 
 
@@ -1152,7 +1150,7 @@ def subnuc(args):
     from Bio.SeqIO import parse, write
     from Bio.Seq import Seq
     fasta = args.fasta.name
-    querySeq = [fasta for fasta in parse(fasta,'fasta')]
+    querySeq = [fasta for fasta in parse(fasta, 'fasta')]
     for i in range(len(querySeq)):
         querySeq[i].seq = Seq(str(querySeq[i].seq).replace(args.q, args.t))
 #    print(querySeq)
@@ -1191,7 +1189,7 @@ def rtigercos(bed):
 
 def total_size(o, handlers={}, verbose=False):
     from collections import deque
-    from sys import getsizeof
+    from sys import getsizeof, stderr
     from itertools import chain
     try:
         from reprlib import repr
@@ -1553,6 +1551,7 @@ def bamcov(args):
     import os
     from subprocess import Popen, PIPE
     import warnings
+    from collections import deque
     import numpy as np
     formatwarning_orig = warnings.formatwarning
     warnings.formatwarning = lambda message, category, filename, lineno, line=None:    formatwarning_orig(message, category, filename, lineno, line='')
@@ -1832,13 +1831,25 @@ def gfatofa(args):
 
 def sampfa(args):
     """
-    parser_sampfa.set_defaults(func=sampfa)
-    parser_sampfa.add_argument("fa", help='Input fasta file', type=argparse.FileType('r'))
-    parser_sampfa.add_argument("-n", help='Number of regions to select', type=int, default=1)
-    parser_sampfa.add_argument("-s", help='Size of region to select', type=int, default=100)
-    parser_sampfa.add_argument("--chr", help='Chromosome from which the regions should be selected. Multiple chromosomes can be selected.', type=str, action='append')
-    parser_sampfa.add_argument("-v", help='Invert chromosome selection', action='store_true')
-    parser_sampfa.add_argument("-o", help='Output file name', type=argparse.FileType('w'))
+    Selects random regions from a fasta file and saves them to a new fasta file.
+
+    :param args: An argparse object containing the following attributes:
+
+                - n: number of regions to select
+
+                - s: size of each region to select
+
+                - fa: input fasta file object
+
+                - chr: list of chromosome IDs to select regions from
+
+                - v: if True, selects regions from chromosomes not in the provided list of chromosomes to select from
+
+                - o: output file object (default: "selected_regions.fa")
+
+    :type args: argparse.Namespace
+    :raises ValueError: If n or s are less than 1
+    :return: None
     """
     n = args.n
     s = int(args.s/2)
@@ -2193,7 +2204,8 @@ def samtocoords(f):
     # TODO: adjust this function to work similarly to bam2coords
     from pandas import DataFrame
     from collections import deque
-    logger = logging.getLogger('SAM reader')
+    # logger = logging.getLogger('SAM reader')
+    logger = mylogger("SAM reader")
     rc = {}        # Referece chromosomes
     rcs = {}        # Selected chromosomes
     al = deque()    # Individual alignment
@@ -2416,11 +2428,33 @@ def syriidx(args):
 
 
 def hyellow(s):
+    """
+    Returns the input string s formatted in yellow color.
+
+    :param s: input string
+    :type s: str
+    :return: input string s formatted in yellow color
+    :rtype: str
+    """
     return('\033[93m' + s + '\033[39m')
 # END
 
 
 def revcompseq(args):
+    """
+    Reverses and complements sequences in an input fasta file and saves the output to a file.
+
+    :param args: An argparse object containing the following attributes:
+
+                - fasta: input fasta file
+
+                - o: output file name (default: 'revcomp.fasta')
+
+                - chr: list of chromosome IDs to reverse complement
+
+    :type args: argparse.Namespace
+    :return: None
+    """
     import sys
     # Set inputs
     logger = mylogger('revcompseq')
@@ -2451,6 +2485,14 @@ def revcompseq(args):
 def splitfa(args):
     """
     Takes an input fasta file and splits its chromosomes/sequences. Each chromosome is saved in a separate file.
+
+    Args:
+    args: An argparse object containing the following attributes:
+        - fasta: input fasta file
+        - prefix: prefix for output file names
+
+    Returns:
+    None
     """
     logger = mylogger('splifa')
     fasta = args.fasta.name
@@ -2782,7 +2824,6 @@ def main(cmd):
     
     args = parser.parse_args()
 
-    from functools import reduce
     from itertools import cycle
     from sys import getsizeof, stderr
     from itertools import chain
