@@ -21,7 +21,9 @@ jobs:
       run: |
         # $CONDA is an environment variable pointing to the root of the miniconda directory
         # export $CONDA/bin >> $GITHUB_PATH
+        which python
         python --version
+        which python
         $CONDA/bin/python --version
         # conda env update --file environment.yml --name base
         # conda install flake8
