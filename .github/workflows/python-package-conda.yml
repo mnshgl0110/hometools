@@ -19,6 +19,11 @@ jobs:
         # $CONDA is an environment variable pointing to the root of the miniconda directory
         # export $CONDA/bin >> $GITHUB_PATH
         $CONDA/bin/python --version
+        conda create -n py3.8 python=3.8
+        conca activate py3.8
+        $CONDA/bin/python --version
+        conda deactivate
+        $CONDA/bin/python --version
         # conda env update --file environment.yml --name base
         # conda install flake8
         # stop the build if there are Python syntax errors or undefined names
