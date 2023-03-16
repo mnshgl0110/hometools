@@ -492,10 +492,10 @@ def pltbar(args):
     column values
     '''
     import sys
-    import warnings
     from collections import OrderedDict
     logger = mylogger("pltbar")
-    if args.f == 'STDIN': fin = sys.stdin
+    if args.f == 'STDIN':
+        fin = sys.stdin
 
     else:
         try:
@@ -503,7 +503,6 @@ def pltbar(args):
         except FileNotFoundError:
             logger.error('Cannot open file: {}'.format(args.f))
             sys.exit()
-
     # Read data
     data = OrderedDict()
     for line in fin:
@@ -516,24 +515,26 @@ def pltbar(args):
             logger.error('Second column contains non numerical values. Exiting.')
             sys.exit()
     pltdata = data
-    if args.sx: keys = sorted(list(pltdata.keys()))
-    elif args.sy: keys = sorted(list(pltdata.keys()), key=lambda x: pltdata[x])
-    else: keys = list(pltdata.keys())
-
+    if args.sx:
+        keys = sorted(list(pltdata.keys()))
+    elif args.sy:
+        keys = sorted(list(pltdata.keys()), key=lambda x: pltdata[x])
+    else:
+        keys = list(pltdata.keys())
     from matplotlib import use as mpuse
     mpuse('agg')
     from matplotlib import pyplot as plt
     fig = plt.figure(figsize=[args.W, args.H])
     ax = fig.add_subplot()
     ax.bar(keys, [int(pltdata[k]) for k in keys])
-
     ax.set_xlabel(' '.join(args.x))
     ax.set_ylabel(' '.join(args.y))
-    if args.t is not None: ax.set_title(args.t)
-    # if args.xlog: ax.set_xscale('log')
-    if args.ylog: ax.set_yscale('log')
-    # if args.xlim is not None: ax.set_xlim([args.xlim[0], args.xlim[1]])
-    if args.ylim is not None: ax.set_ylim([args.ylim[0], args.ylim[1]])
+    if args.t is not None:
+        ax.set_title(args.t)
+    if args.ylog:
+        ax.set_yscale('log')
+    if args.ylim is not None:
+        ax.set_ylim([args.ylim[0], args.ylim[1]])
     ax.minorticks_on()
     ax.xaxis.grid(True, which='both', linestyle='--')
     ax.yaxis.grid(True, which='both', linestyle='--')
@@ -556,24 +557,24 @@ def plotal(args):
     :param args:
     :return:
     """
-
     from collections import deque
     import pandas as pd
     from matplotlib import pyplot as plt
     from matplotlib.pyplot import get_cmap
     import matplotlib
-
+    # Parse arguments
     finname = args.align.name
     out = args.out.name
     DPI = args.D
-
-    als = deque()
     # Read alignments
+    als = deque()
     with open(finname, 'r') as fin:
         for line in fin:
-            if line[0] == '#': continue
+            if line[0] == '#':
+                continue
             line = line.strip().split()
-            if len(line) == 0: continue
+            if len(line) == 0:
+                continue
             s = line[0].split(':')
             s += s[2].split('-')
             s.pop(2)
@@ -583,11 +584,9 @@ def plotal(args):
             als.append(s + e + [line[2]])
     als = pd.DataFrame(als)
     als[[2, 3, 6, 7]] = als[[2, 3, 6, 7]].astype(int)
-
     ngen = len(set(pd.concat([als[0], als[4]])))
     gdict = dict(zip(pd.unique(pd.concat([als[0], als[4]])), range(ngen-1, -1, -1)))
     maxp = als[[2, 3, 6, 7]].max().max()
-
     fig = plt.figure(figsize=[5, 4])
     ax = fig.add_subplot()
     ax.set_ylim([-0.1, ngen - 1 + 0.1])
@@ -605,17 +604,15 @@ def plotal(args):
         CHRCOLS = [matplotlib.colors.to_hex(get_cmap('gist_rainbow')(int(255/ngen) * i)) for i in range(0, ngen)]
         if ngen % 2 != 0:
             m = CHRCOLS[int((ngen/2) + 1)]
-            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i +ngen/2)]]] + [m]
+            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i + ngen/2)]]] + [m]
         else:
-            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i +ngen/2)]]]
-
+            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i + ngen/2)]]]
 
     for i in range(ngen):
         ax.hlines(ngen - 1 - i, 1, maxp,
                   color=CHRCOLS[i],
                   linewidth=5,
                   zorder=2)
-
     # print(gdict)
     for al in als.itertuples(index=False):
         # zorder = 0 if abs(gdict[al[0]] - gdict[al[4]]) == 1 else 3
@@ -623,6 +620,7 @@ def plotal(args):
     plt.tight_layout(pad=0, h_pad=0, w_pad=0)
     plt.savefig(out, dpi=DPI)
     plt.close()
+    return
 # END
 
 
