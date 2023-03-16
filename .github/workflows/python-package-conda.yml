@@ -18,6 +18,8 @@ jobs:
       run: |
         # $CONDA is an environment variable pointing to the root of the miniconda directory
         # export $CONDA/bin >> $GITHUB_PATH
+        conda init bash
+        bash
         $CONDA/bin/python --version
         conda create -n py3.8 python=3.8
         conda activate py3.8
