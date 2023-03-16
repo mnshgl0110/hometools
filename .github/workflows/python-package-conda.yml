@@ -20,7 +20,7 @@ jobs:
         # export $CONDA/bin >> $GITHUB_PATH
         $CONDA/bin/python --version
         conda create -n py3.8 python=3.8
-        conca activate py3.8
+        conda activate py3.8
         $CONDA/bin/python --version
         conda deactivate
         $CONDA/bin/python --version
