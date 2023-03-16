@@ -4,5 +4,4 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  - scipy=1.9.3=py38h8ce737c_1
-
+  - tqdm
