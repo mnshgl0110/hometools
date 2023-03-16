@@ -7,24 +7,24 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 5
+      matrix:
+        python-version: [ "3.8", "3.9" ]
 
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Python 3.8
-      uses: actions/setup-python@v4
+    - uses: conda-incubator/setup-miniconda@v2
       with:
-        python-version: "3.8"
+        activate-environment: test
+        mamba-version: "*"
+        channels: conda-forge,defaults
+        environment-file: environment.yml
+        python-version: ${{ matrix.python-version }}
+        auto-activate-base: false
     - name: Add conda to system path
       run: |
         # $CONDA is an environment variable pointing to the root of the miniconda directory
         # export $CONDA/bin >> $GITHUB_PATH
-        conda init bash
-        source ~/.bashrc
-        $CONDA/bin/python --version
-        conda create -n py3.8 python=3.8
-        conda activate py3.8
-        $CONDA/bin/python --version
-        conda deactivate
+        python --version
         $CONDA/bin/python --version
         # conda env update --file environment.yml --name base
         # conda install flake8
