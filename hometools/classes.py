@@ -298,6 +298,7 @@ class snvdata:
 
     def _getbases(self, l):
         from collections import deque
+        import sys
         indellist = deque()
         indelcount = 0
         bases = deque()
