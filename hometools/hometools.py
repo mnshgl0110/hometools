@@ -10,9 +10,6 @@ import argparse
 import os
 import sys
 
-from hometools.hometools import mylogger
-
-
 class Namespace:
     """
     Use this to create args object for parsing to functions
