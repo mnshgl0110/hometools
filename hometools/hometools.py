@@ -10,6 +10,9 @@ import argparse
 import os
 import sys
 
+from hometools.hometools import mylogger
+
+
 class Namespace:
     """
     Use this to create args object for parsing to functions
@@ -2232,7 +2235,7 @@ def samtocoords(f):
                 cgt = [[int(j[0]), j[1]] for j in [i.split(';') for i in l[5].replace('S', ';S,').replace('H', ';H,').replace('=', ';=,').replace('X', ';X,').replace('I', ';I,').replace('D', ';D,').split(',')[:-1]]]
                 if len(cgt) > 2:
                     if True in [True if i[1] in ['S', 'H'] else False for i in cgt[1:-1]]:
-                        logger.error("Incorrect CIGAR string found. Clipped bases inside alignment. H/S can only be in the terminal. CIGAR STRING: " + aln.cigarstring)
+                        logger.error("Incorrect CIGAR string found. Clipped bases inside alignment. H/S can only be in the terminal. CIGAR STRING: " + l[5])
                         sys.exit()
 
                 bf = '{:012b}'.format(int(l[1]))
@@ -2472,11 +2475,30 @@ def revcompseq(args):
     # Get reversed complemented fasta
     for chrom, s in readfasta_iterator(open(fasta, 'r'), isgzip(fasta)):
         if chrom in chrids:
+            logger.info(f'Reverse complementing chromosome {chrom}')
             outfasta[chrom] = revcomp(s)
         else:
             outfasta[chrom] = s
     writefasta(outfasta, out)
     logger.info('Finished')
+# END
+
+
+def syri2bed(args):
+    '''
+    Take output of syri and converts it into bedpe format
+    '''
+    input = args.input.name
+    output = args.output.name
+    logger = mylogger("syri2bedpe")
+    f = args.f
+    # TODO: Complete this function
+
+    # with open(input, 'r') as fin, open(output, 'w') as fout:
+    #     for line in fin:
+    #         line = line.strip().split()
+    logger.warning('This function is not working yet.')
+    return
 # END
 
 
@@ -2538,6 +2560,7 @@ def main(cmd):
     ## syri
     parser_runsyri = subparsers.add_parser("runsyri", help=hyellow("syri: Parser to align and run syri on two genomes"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_syriidx = subparsers.add_parser("syriidx", help=hyellow("syri: Generates index for syri.out. Filters non-SR annotations, then bgzip, then tabix index"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_syri2bed = subparsers.add_parser("syri2bed", help=hyellow("syri: Converts syri output to bedpe format"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     ## Plotting
     parser_plthist = subparsers.add_parser("plthist", help="Plot: Takes frequency output (like from uniq -c) and generates a histogram plot", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -2595,13 +2618,6 @@ def main(cmd):
     # parser_plotbar.add_argument("-n", help="Number of bins", type=int, default=100)
 
 
-    # syriidx
-    parser_syriidx.set_defaults(func=syriidx)
-    parser_syriidx.add_argument("syriout", help='syri output file', type=argparse.FileType('r'))
-    parser_syriidx.add_argument("-f", help='Only output syntenic and SR regions.', default=False, action='store_true')
-    parser_syriidx.add_argument("--notal", help='Also include reference NOTAL regions', default=False, action='store_true')
-
-
     # bam2coords
     parser_bam2coords.set_defaults(func=bam2coords)
     parser_bam2coords.add_argument("fin", help='Input BAM/SAM file', type=argparse.FileType('r'))
@@ -2615,6 +2631,15 @@ def main(cmd):
     parser_runsyri.add_argument("-n", help='Number of cores to use', type=int, default=1)
     parser_runsyri.add_argument("-p", help='prefix', type=str, default='out')
     parser_runsyri.add_argument("-alignment", help='Output alignment type', choices=['sam', 'bam', 'paf'], default='paf', type=str)
+
+    # syriidx
+    parser_syriidx.set_defaults(func=syriidx)
+    parser_syriidx.add_argument("syriout", help='syri output file', type=argparse.FileType('r'))
+    parser_syriidx.add_argument("-f", help='Only output syntenic and SR regions.', default=False, action='store_true')
+    parser_syriidx.add_argument("--notal", help='Also include reference NOTAL regions', default=False, action='store_true')
+
+    # syri2bed
+    parser_syri2bed.set_default(func=syri2bed)
 
 
     # fachrid

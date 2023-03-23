@@ -61,6 +61,7 @@ class Cigar:
         If ref=True, removes from the 'start'/end of the QUERY strand until 'n' bases from the REFERENCE strand have been removed, if ref=False vice versa.
         :return: The number of bases deleted in the query/ref and a CIGAR with these bases removed.
         """
+        import copy
         cg = copy.deepcopy(self)
 
         ind = 0 if start else -1
