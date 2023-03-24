@@ -1089,27 +1089,46 @@ def density_scatter(x, y, ax=None, fig=None, sort=True, bins=20, **kwargs):
 # END
 
 
-def extractSeq(args):
+def extractseq(args):
     # TODO: Fix this function to work with new parameter style
+    """
+    parser_exseq.set_defaults(func=extractseq)
+    parser_exseq.add_argument("fasta", help="fasta file", type=argparse.FileType('r'))
+    parser_exseq.add_argument("-c", "--chr", help="Chromosome ID", type=str)
+    parser_exseq.add_argument("-s", "--start", help="Start location (BED format, 0-base, end included)", type=int)
+    parser_exseq.add_argument("-e", "--end", help="End location (BED format, 0-base, end excluded)", type=int)
+    parser_exseq.add_argument("--fin", help="File containing locations to extract (BED format)", type=argparse.FileType('r'))
+    parser_exseq.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default=None)
+    parser_exseq.add_argument("-r", help="Reverse complement the sequence", default=False, action='store_true')
+
+    """
     import pandas as pd
     import warnings
     if args.fin is not None:
         if args.chr is not None or args.start is not None or args.end is not None:
             warnings.warn("Using --fin. Ignoring --chr, -s, -e")
-    f = args.fasta.name
-    r = args.r
+    fasta = args.fasta.name
+    rev = args.r
+    output = args.o.name if args.o is not None else args.o
+
     if args.fin is None:
-        seqid = args.chr
-        q = {c: s for c, s in readfasta(f).items() if c == seqid}
-        if len(q) > 1:
-            sys.exit("Found multiple chromosomes with same ID. Exiting.")
+        chrom = args.chr
         start = int(args.start) if args.start is not None else 0
-        end = int(args.end) if args.end is not None else len(q[seqid])
-        outseq = revcomp(q[seqid][start:end]) if r else q[seqid][start:end]
-        if args.o is not None:
-            writefasta({seqid: outseq}, args.o.name)
+        end = int(args.end) if args.end is not None else args.end
+        for c, s in readfasta_iterator(open(fasta, 'r'), isgzip(fasta)):
+            if c == chrom:
+                end = end if end is not None else len(s)
+                outseq = revcomp(s[start:end]) if rev else s[start:end]
+                break
+        # if len(q) > 1:
+        #     sys.exit("Found multiple chromosomes with same ID. Exiting.")
+        # start = int(args.start) if args.start is not None else 0
+        # end = int(args.end) if args.end is not None else len(q[chrom])
+        # outseq = revcomp(q[chrom][start:end]) if r else q[chrom][start:end]
+        if output is not None:
+            writefasta({chrom: outseq}, output)
         else:
-            print(">{}\n{}".format(seqid, outseq))
+            print(">{}\n{}".format(chrom, outseq))
     else:
         fin = pd.read_table(args.fin.name, header=None, delim_whitespace=True)[[0, 1, 2]]
         fin.columns = ["chr", "start", "end"]
@@ -1118,15 +1137,15 @@ def extractSeq(args):
         fin.sort_values(["chr", "start", "end"], inplace=True)
         out = dict()
         chroms = set(fin.chr.values)
-        for c, s in readfasta(f).items():
+        for c, s in readfasta_iterator(open(fasta, 'r'), isgzip(fasta)):
             if c in chroms:
                 cdf = fin.loc[fin.chr == c].copy()
                 cdf.loc[cdf['end'] > len(s), 'end'] = len(s)
                 for row in cdf.itertuples(index=False):
-                    out['{}_{}_{}'.format(c, row[1], row[2])] = revcomp(s[row.start:row.end]) if r else s[row.start:row.end]
+                    out['{}_{}_{}'.format(c, row[1], row[2])] = revcomp(s[row.start:row.end]) if rev else s[row.start:row.end]
         # Output the selected sequence
-        if args.o is not None:
-            writefasta(out, args.o.name)
+        if output is not None:
+            writefasta(out, output)
         else:
             for c, s in out.items():
                 print(">{}\n{}".format(c, s))
@@ -2636,7 +2655,7 @@ def main(cmd):
     parser_syriidx.add_argument("--notal", help='Also include reference NOTAL regions', default=False, action='store_true')
 
     # syri2bed
-    parser_syri2bed.set_default(func=syri2bed)
+    parser_syri2bed.set_defaults(func=syri2bed)
 
 
     # fachrid
@@ -2809,7 +2828,7 @@ def main(cmd):
     parser_getchr.add_argument("-v", help="Remove chromosomes provided", default=False, action='store_true')
     parser_getchr.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default=None)
     
-    parser_exseq.set_defaults(func=extractSeq)
+    parser_exseq.set_defaults(func=extractseq)
     parser_exseq.add_argument("fasta", help="fasta file", type=argparse.FileType('r'))
     parser_exseq.add_argument("-c", "--chr", help="Chromosome ID", type=str)
     parser_exseq.add_argument("-s", "--start", help="Start location (BED format, 0-base, end included)", type=int)
