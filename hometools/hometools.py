@@ -1534,32 +1534,49 @@ def gffsort(args):
 
 
 def getcol(args):
-    if args.s is None:
-        args.s = '\t'
-    elif len(args.s) > 1:
-        sys.exit('Only single characters are accepted as column separators')
-    if len(args.m) == 0 and len(args.c) == 0:
-        sys.exit("No columns are selected. Use -m and -c to select columns")
+    """
+    Takes an input file and selects columns from it
+    """
+    logger = mylogger("getcol")
+    fin = args.file.name
+    fout = args.out.name
+    s = '\t' if args.s is None else args.s
+    ms = [] if args.m is None else args.m
+    cs = [] if args.c is None else args.c
+    print(s, ms, cs)
+    reorder = args.reorder
+    if len(s) > 1:
+        logger.error('Only single characters are accepted as column separators')
+        sys.exit()
+    if len(ms) == 0 and len(cs) == 0:
+        logger.error("No columns are selected. Use -m and -c to select columns")
+        sys.exit()
 
-    with open(args.file.name, 'r') as fin:
-        with open(args.out.name, 'w') as fout:
-            first = True
-            for line in fin:
-                line = line.strip().split(args.s)
+    select = []
+    first = True
+    with open(fin, 'r') as f:
+        with open(fout, 'w') as out:
+            for line in f:
+                if line == '':
+                    continue
+                if line is None:
+                    continue
+                line = line.strip().split(s)
                 if first:
-                    select = []
-                    for m in args.m:
-                        for i in range(len(line)):
-                            if line[i] == m:
+                    for m in ms:
+                        for i, v in enumerate(line):
+                            if v == m:
                                 select.append(i)
-                    for c in args.c:
-                        for i in range(len(line)):
-                            if c in line[i]:
+                    for c in cs:
+                        for i, v in enumerate(line):
+                            if c in v:
                                 select.append(i)
-                    select = sorted(list(set(select)))
+                    if not reorder:
+                        select = sorted(list(set(select)))
                     first = False
                     print('Select columns: {}'.format([line[i] for i in select]))
-                fout.write(args.s.join([line[i] for i in select]) + '\n')
+                out.write(s.join([line[i] for i in select]) + '\n')
+    return
 # END
 
 
@@ -2766,6 +2783,8 @@ def main(cmd):
     parser_getcol.add_argument("-s", help="Column separating char if not separated by tab/spaces", type=str)
     parser_getcol.add_argument("-m", help="Select column matching this string. Multiple space separated values can be provided", type=str, nargs='+')
     parser_getcol.add_argument("-c", help="Select column containing this string. Multiple space separated values can be provided", type=str, nargs='+')
+    parser_getcol.add_argument("--reorder", help="Change output column order based on the order of the selected columns in -m and -c", default=False, action='store_true')
+
 
 
     parser_gffsort.set_defaults(func=gffsort)
