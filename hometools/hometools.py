@@ -1543,7 +1543,6 @@ def getcol(args):
     s = '\t' if args.s is None else args.s
     ms = [] if args.m is None else args.m
     cs = [] if args.c is None else args.c
-    print(s, ms, cs)
     reorder = args.reorder
     if len(s) > 1:
         logger.error('Only single characters are accepted as column separators')
@@ -1551,10 +1550,11 @@ def getcol(args):
     if len(ms) == 0 and len(cs) == 0:
         logger.error("No columns are selected. Use -m and -c to select columns")
         sys.exit()
-
     select = []
     first = True
+    logger.info(f'Reading from: {fin}')
     with open(fin, 'r') as f:
+        logger.info(f'Writing to: {fout}')
         with open(fout, 'w') as out:
             for line in f:
                 if line == '':
@@ -1574,8 +1574,9 @@ def getcol(args):
                     if not reorder:
                         select = sorted(list(set(select)))
                     first = False
-                    print('Select columns: {}'.format([line[i] for i in select]))
+                    logger.info(f'Selected columns: {",".join([line[i] for i in select])}')
                 out.write(s.join([line[i] for i in select]) + '\n')
+    logger.info('Finished')
     return
 # END
 
