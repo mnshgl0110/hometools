@@ -291,7 +291,7 @@ class snvdata:
         self.ref = ls[2]
         self.rc = int(ls[3])
         self.basestring = ls[4]
-        self.bases, self.indels = [0, []] if self.rc == 0 else self._getbases(ls[4])
+        self.bases, self.indels = [[], []] if self.rc == 0 else self._getbases(ls[4])
         if len(self.bases) != self.rc:
             raise Exception('Number of identified bases if not equals to read count for {}:{}. ReadCount: {}, BaseCount: {}'.format(self.chr, self.pos, self.rc, len(self.bases)))
         self.BQ = [ord(c) - 33 for c in ls[5]]
@@ -316,9 +316,10 @@ class snvdata:
                     continue
                 # skip = int(c)
                 else:
-                    indel = False
                     skip -= 1
                     ind += c
+                    if skip == 0:
+                        indel = False
                     continue
             if ind != '':
                 indellist.append(ind)
@@ -359,6 +360,9 @@ class snvdata:
 
     def basecnt(self, base):
         return len([1 for i in self.bases if i == base])
+
+    def indelcnt(self, indel):
+        return len([1 for i in self.indels if i == indel])
 
     def getBQ(self, base):
         return [self.BQ[i] for i in range(len(self.bases)) if self.bases[i] == base]

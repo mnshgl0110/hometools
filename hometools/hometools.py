@@ -980,6 +980,49 @@ def unlist(nestedList):
 # END
 
 
+def undict(input):
+    """
+    Takes a nested dict and converts it into a list of list. `lvl` corresponds to
+    the number of iterations to be done.
+
+    Example:
+    ```
+    d = {'a': {'a1': {'a2': 1}}, 'b': {'b1': {'b2': 2}}}
+
+    d1 = undict(d)
+    print(d1)
+    [['a', 'a1', 'a2', 1], ['b', 'b1', 'b2', 2]]
+    ```
+    """
+    from collections import deque
+    from collections.abc import Iterable
+    def getlist(var):
+        """
+        takes an object as input and creates a list with the object as its element
+        """
+        if isinstance(var, Iterable):
+            if not isinstance(var, str):
+                return list(var)
+            else:
+                return [var]
+        else:
+            return [var]
+    # END
+    if isinstance(input, dict):
+        outdict = deque()
+        for k in input.keys():
+            childdict, wasdict = undict(input[k])
+            if wasdict:
+                outdict.extend([getlist(k) + i for i in childdict])
+            else:
+                outdict.extend([getlist(k) + childdict])
+        return outdict, True
+    else:
+        return getlist(input), False
+
+# END
+
+
 def getvalues(l, index):
     """from list l get the values at indices specified by index"""
     return [l[i] for i in index]
