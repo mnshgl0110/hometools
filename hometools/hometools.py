@@ -1214,6 +1214,24 @@ def revcomp(seq):
 # END
 
 
+def canonical(seq):
+    """
+    For an input string (seq, k-mer), return the canonical K-mer which is defined as
+    the minimum string between seq and revcomp(seq)
+    """
+    return min(seq, revcomp(seq))
+# END
+
+
+def canonical_kmers(size):
+    """
+    For a given size (n), return all canonical k-mers of size (n)
+    """
+    from itertools import product
+    return set(map(canonical, map(''.join, product(*['ATGC']*size))))
+# END
+
+
 def subnuc(args):
     from Bio.SeqIO import parse, write
     from Bio.Seq import Seq
