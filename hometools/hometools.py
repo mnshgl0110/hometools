@@ -1078,6 +1078,14 @@ def view(d, n=5):
 # END
 
 
+def printdf(df):
+    """
+    Takes a DataFrame as input and print all columns
+    """
+    print(df.to_string())
+    return
+# END
+
 
 ############################## API #############################################
 
@@ -1296,50 +1304,51 @@ def total_size(o, handlers={}, verbose=False):
 # END
 
 
-def getScaf(args):
+def getscaf(args):
     import numpy as np
-    from Bio.Alphabet import generic_dna
-    from Bio.SeqRecord import SeqRecord
-    from Bio.SeqIO import parse, write
+    logger = mylogger("Get Scaffolds")
     fin = args.fasta.name
     n = args.n
     fout = args.o
+    prefix = args.p
     rev = 2 if args.r else 1
-    gen = {fasta.id:fasta for fasta in parse(fin,'fasta')}
-    chromLen = {chrom.id:len(chrom.seq) for chrom in gen.values()}
-    
-    chrID = [np.random.choice(list(chromLen.keys()), 1)[0] for i in range(n)]
-    cutoff = [np.random.randint(10000,chromLen[i] - 10000, 1)[0] for i in chrID]
-    coords = sorted(list(zip(chrID, cutoff)))
-    
+    logger.info('Reading input fasta')
+    gen = readfasta(fin)
+    chromlen = {chrom: len(seq) for chrom, seq in gen.items()}
+    logger.info(f'Selecting {n-len(gen)} breakpoints to generate {n} scaffolds')
+    chrid = [np.random.choice(list(chromlen.keys()), 1)[0] for i in range(n-len(gen))]
+    cutoff = [np.random.randint(10000, chromlen[i] - 10000, 1)[0] for i in chrid]
+    coords = sorted(list(zip(chrid, cutoff)))
     cid = ""
     pos = -1
-    scafGenome = []
+    logger.info(f'Generating scaffolds')
+    scafgenome = {}
     for i in range(len(coords)):
         coord = coords[i]
         if coord[0] != cid:
             if cid in gen:
                 if np.random.randint(0, rev, 1):
-                    scafGenome.append(SeqRecord(seq=gen[cid][pos:chromLen[cid]].seq.reverse_complement(), id = cid+"_"+str(chromLen[cid])+"_r", description=""))
+                    scafgenome[f'{prefix}_{cid}_{chromlen[cid]}_r'] = revcomp(gen[cid][pos:chromlen[cid]])
                 else:
-                    scafGenome.append(SeqRecord(seq=gen[cid][pos:chromLen[cid]].seq, id = cid+"_"+str(chromLen[cid]), description=""))  
+                    scafgenome[f'{prefix}_{cid}_{chromlen[cid]}'] = gen[cid][pos:chromlen[cid]]
             cid = coord[0]
             pos = 0
         if np.random.randint(0, rev, 1):
-            scafGenome.append(SeqRecord(seq=gen[cid][pos:coord[1]].seq.reverse_complement(), id = cid+"_"+str(coord[1])+"_r", description=""))
+            scafgenome[f'{prefix}_{cid}_{coord[1]}_r'] = revcomp(gen[cid][pos:coord[1]])
         else:
-            scafGenome.append(SeqRecord(seq=gen[cid][pos:coord[1]].seq, id = cid+"_"+str(coord[1]), description=""))
+            scafgenome[f'{prefix}_{cid}_{coord[1]}'] = gen[cid][pos:coord[1]]
         pos = coord[1]
-    
     if np.random.randint(0, rev, 1):
-        scafGenome.append(SeqRecord(seq=gen[cid][pos:chromLen[cid]].seq.reverse_complement(), id=cid+"_"+str(chromLen[cid])+"_r", description=""))
+        scafgenome[f'{prefix}_{cid}_{chromlen[cid]}_r'] = revcomp(gen[cid][pos:chromlen[cid]])
     else:
-        scafGenome.append(SeqRecord(seq=gen[cid][pos:chromLen[cid]].seq, id = cid+"_"+str(chromLen[cid]), description=""))
-    
+        scafgenome[f'{prefix}_{cid}_{chromlen[cid]}'] = gen[cid][pos:chromlen[cid]]
     for key in gen.keys():
-        if key not in chrID:
-            scafGenome.append(SeqRecord(seq=gen[key].seq, id = key, description=""))
-    write(scafGenome,fout,"fasta")
+        if key not in chrid:
+            scafgenome[f'{prefix}_{key}'] = gen[key]
+    logger.info(f'Writing scaffolds to {fout}')
+    writefasta(scafgenome, fout)
+    logger.info(f'Finished')
+    return
 # END
 
 
@@ -2604,7 +2613,44 @@ def splitfa(args):
 # END
 
 
-# if __name__ == '__main__':
+def cntkmer(args):
+    """
+    Takes an input fasta file and counts the number of times an input kmer is present.
+
+    Args:
+    args: An argparse object containing the following attributes:
+
+        - fasta: input fasta file
+        - kmer: kmer to count
+        - canonical: Count both the kmer and its reverse complement
+
+    Returns:
+    None
+    """
+    import re
+    logger = mylogger('cntkmer')
+    fasta = args.fasta.name
+    kmer = args.kmer
+    cano = args.canonical
+    count = 0
+    kmerlower = kmer.lower()
+    kmerrc = revcomp(kmer) if cano else ''
+    kmerrclower = revcomp(kmer).lower() if cano else ''
+    selectedkmer = [s for s in [kmer, kmerlower, kmerrc, kmerrclower] if s != '']
+    logger.info(f'Kmer strings to search: {selectedkmer}')
+    logger.info(f"Reading {fasta}")
+    for chrom, seq in readfasta_iterator(open(fasta, 'r'), isgzip(fasta)):
+        count += len(re.findall(f'(?=({kmer}))', seq))
+        count += len(re.findall(f'(?=({kmerlower}))', seq))
+        if cano:
+            count += len(re.findall(f'(?=({kmerrc}))', seq))
+            count += len(re.findall(f'(?=({kmerrclower}))', seq))
+
+    print(f'Number of occurence of K-mer {kmer}: {count}')
+    logger.info('Finished')
+    return
+# END
+
 def main(cmd):
     parser = argparse.ArgumentParser("Collections of command-line functions to perform common pre-processing and analysis functions.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     subparsers = parser.add_subparsers()
@@ -2625,6 +2671,8 @@ def main(cmd):
     parser_faline = subparsers.add_parser("faline", help=hyellow("FASTA: Convert fasta file from single line to multi line or vice-versa"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_revcompseq = subparsers.add_parser("revcompseq", help=hyellow("FASTA: Reverse complement specific chromosomes in a fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_splitfa = subparsers.add_parser("splitfa", help=hyellow("FASTA: Split fasta files to individual sequences. Each sequence is saved in a separate file."), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_cntkmer = subparsers.add_parser("countkmer", help=hyellow("FASTA: Count the number of occurence of a given kmer in a fasta file."), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
 
     ## BAM
     parser_bamcov = subparsers.add_parser("bamcov", help="BAM: Get mean read-depth for chromosomes from a BAM file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -2663,6 +2711,14 @@ def main(cmd):
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
+
+    # cntkmer
+    parser_cntkmer.set_defaults(func=cntkmer)
+    parser_cntkmer.add_argument("fasta", help="Input fasta file", type=argparse.FileType('r'))
+    parser_cntkmer.add_argument("kmer", help="Kmer to find in fasta", type=str)
+    parser_cntkmer.add_argument("--canonical", help="Count both the kmer and its reverse complement", default=False, action='store_true')
+    # parser_cntkmer.add_argument("--loci", help="Also output locus of each kmer", action='store_true')
+
 
     # splitfa
     parser_splitfa.set_defaults(func=splitfa)
@@ -2900,11 +2956,12 @@ def main(cmd):
     parser_exseq.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default=None)
     parser_exseq.add_argument("-r", help="Reverse complement the sequence", default=False, action='store_true')
 
-    parser_getscaf.set_defaults(func=getScaf)
+    parser_getscaf.set_defaults(func=getscaf)
     parser_getscaf.add_argument("fasta", help="genome fasta file", type=argparse.FileType('r'))
     parser_getscaf.add_argument("n", help="number of scaffolds required", type=int)
     parser_getscaf.add_argument("-r", help="reverse complement some scaffolds", default=False, action="store_true")
     parser_getscaf.add_argument("-o", help="output file name", default="scaf.fasta")
+    parser_getscaf.add_argument("-p", help="Chromosome ID prefix", type=str, default='')
 
     parser_seqsize.set_defaults(func=seqsize)
     parser_seqsize.add_argument("fasta", help="genome fasta file", type=argparse.FileType('r'))
