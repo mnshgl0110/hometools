@@ -10,6 +10,7 @@ import argparse
 import os
 import sys
 
+
 class Namespace:
     """
     Use this to create args object for parsing to functions
@@ -232,13 +233,12 @@ def cggenlen(cg, gen, full=False):
         assert(gen in ['r', 'q'])
     except AssertionError:
         raise ValueError('gen need to "r" or "q" for reference or query')
-        return
     if gen == 'r':
-        s = set(['M', 'D', 'N', '=', 'X'])
+        s = {'M', 'D', 'N', '=', 'X'}
     elif full:
-        s = set(['M', 'I', 'S', '=', 'X', 'H'])
+        s = {'M', 'I', 'S', '=', 'X', 'H'}
     else:
-        s = set(['M', 'I', 'S', '=', 'X'])
+        s = {'M', 'I', 'S', '=', 'X'}
     l = sum([int(i[0]) for i in cg if i[1] in s])
     return l
 # END
@@ -250,8 +250,8 @@ def cgwalk(cg, n, ngen='r'):
     """
     cnt = 0                   # Count in the focal genome
     ocnt = 0                  # Count in the other genome
-    nset = set(['M', 'D', 'N', '=', 'X']) if ngen == 'r' else set(['M', 'I', '=', 'X'])
-    oset = set(['M', 'I', '=', 'X']) if ngen == 'r' else set(['M', 'D', 'N', '=', 'X'])
+    nset = {'M', 'D', 'N', '=', 'X'} if ngen == 'r' else {'M', 'I', '=', 'X'}
+    oset = {'M', 'I', '=', 'X'} if ngen == 'r' else {'M', 'D', 'N', '=', 'X'}
     for c in cg:
         if c[1] in {'H', 'P', 'S'}: continue
         if c[1] in nset:
@@ -501,7 +501,7 @@ def p_adjust(*args):
         o = order(pvalues, 'TRUE')
         ro = order(o)
         for index in range(1, n+1):
-            q += 1.0 / index;
+            q += 1.0 / index
         cummin_input = []
         for index in range(n):
             cummin_input.insert(index, q * (n/(n-index)) * pvalues[o[index]])
@@ -1199,6 +1199,7 @@ def plotal(args):
     from matplotlib import pyplot as plt
     from matplotlib.pyplot import get_cmap
     import matplotlib
+    from hometools.plot import bezierpath
     # Parse arguments
     finname = args.align.name
     out = args.out.name

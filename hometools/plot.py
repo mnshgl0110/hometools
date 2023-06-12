@@ -11,7 +11,6 @@ def getcolors(cp, count):
 # END
 
 
-
 def plotref(refidx, varpos, syrireg, figout, bw=100000):
     """
     Plots distribution of bed file on a genome annotated with SRs
@@ -24,11 +23,14 @@ def plotref(refidx, varpos, syrireg, figout, bw=100000):
     from matplotlib import pyplot as plt
     from matplotlib.patches import Rectangle
     from matplotlib.collections import PatchCollection
-    import pybedtools as bt # TODO: remove this dependency
+    import pybedtools as bt     # TODO: remove this dependency
     from collections import deque, defaultdict
     import numpy as np
     import logging
+    from hometools.hometools import mergeRanges, readfaidxbed
+    import sys
     logger = logging.getLogger('plotref')
+
     def _readbed(vp, refbed):
         _chrs = set([r[0] for r in refbed])
         bincnt = defaultdict(deque)
