@@ -21,6 +21,59 @@ class Namespace:
 # END
 inttr = lambda x: [int(x[0]), x[1]]
 
+
+############################# Set logger #######################################
+
+def setlogconfig(lg):
+    """
+    :param lg: Log-level
+    :return:
+    """
+    import logging.config
+    logging.config.dictConfig({
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'log_file': {
+                'format': "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s",
+            },
+            'stdout': {
+                'format': "%(name)s - %(levelname)s - %(message)s",
+            },
+        },
+        'handlers': {
+            'stdout': {
+                'class': 'logging.StreamHandler',
+                'formatter': 'stdout',
+                'level': 'WARNING',
+            },
+        },
+        'loggers': {
+            '': {
+                'level': lg,
+                'handlers': ['stdout'],
+                # 'handlers': ['stdout', 'log_file'],
+            },
+        },
+    })
+# END
+
+
+def mylogger(logname):
+    from hometools.classes import CustomFormatter
+    import logging
+    logger = logging.getLogger(logname)
+    handler = logging.StreamHandler()
+    handler.setFormatter(CustomFormatter())
+    logger.addHandler(handler)
+    logging.basicConfig(level=logging.INFO)
+    logger.propagate = False
+    return logger
+# END
+
+
+logger = mylogger(__name__)
+
 ############################# FASTA ############################################
 def readfasta(f):
     # TODO: This takes too long when used with getchr for large genomes. Try to optimise FASTA reading when the entire genome is not needed.
@@ -215,53 +268,6 @@ def cgwalk(cg, n, ngen='r'):
 # END
 
 ############################# logging ##########################################
-def setlogconfig(lg):
-    """
-    :param lg: Log-level
-    :return:
-    """
-    import logging.config
-    logging.config.dictConfig({
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {
-            'log_file': {
-                'format': "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s",
-            },
-            'stdout': {
-                'format': "%(name)s - %(levelname)s - %(message)s",
-            },
-        },
-        'handlers': {
-            'stdout': {
-                'class': 'logging.StreamHandler',
-                'formatter': 'stdout',
-                'level': 'WARNING',
-            },
-        },
-        'loggers': {
-            '': {
-                'level': lg,
-                'handlers': ['stdout'],
-                # 'handlers': ['stdout', 'log_file'],
-            },
-        },
-    })
-# END
-
-
-def mylogger(logname):
-    from hometools.classes import CustomFormatter
-    import logging
-    logger = logging.getLogger(logname)
-    handler = logging.StreamHandler()
-    handler.setFormatter(CustomFormatter())
-    logger.addHandler(handler)
-    logging.basicConfig(level=logging.INFO)
-    logger.propagate = False
-    return logger
-# END
-
 
 ############################# UTIL #############################################
 
@@ -399,397 +405,6 @@ def findoverlaps(r1, r2):
     #   print(b)
     # df columns: [chr, start, end, ....]
     pass
-# END
-
-
-
-################################### Plotting ###################################
-def plthist(args):
-    import sys
-    import warnings
-    if args.f == 'STDIN': fin = sys.stdin
-    else:
-        try:
-            fin = open(args.f, 'r')
-        except FileNotFoundError:
-            raise FileNotFoundError(' Cannot open file: {}'.format(args.f))
-            sys.exit()
-
-    # Read data
-    data = {}
-    for line in fin:
-        line = line.strip().split()
-        if len(line) > 2: raise warnings.warn('Input has more than 2 columns. Using the first two columns')
-        try:
-            data[line[1]] = float(line[0])
-        except ValueError:
-            raise ValueError('First column contains non numerical values')
-            sys.exit()
-    # Check if keys are numeric
-    num = True
-    for k in data.keys():
-        try:
-            a = float(k)
-        except ValueError:
-            num = False
-            break
-    # print(num)
-    if num:
-        if args.xlim is not None:
-            MIN, MAX = args.xlim[0], args.xlim[1]
-            pltdata = {float(k): v for k, v in data.items() if float(k) <= MAX and float(k) >= MIN}
-        else :
-            pltdata = {float(k): v for k, v in data.items()}
-            MIN = min(list(pltdata.keys()))
-            MAX = max(list(pltdata.keys()))
-        pltdata2 = {}
-        m = MIN
-        n = (MAX - MIN)/args.n
-        for i in range(args.n):
-            pltdata2[(m, m+n)] = 0
-            m +=n
-        for k, v in pltdata.items():
-            for k2 in pltdata2.keys():
-                if k >= k2[0] and k <k2[1]:
-                    pltdata2[k2] += v
-
-        pltdata = {(k[0]+k[1])/2 : v for k, v in pltdata2.items()}
-    else:
-        pltdata = data
-
-    sort_k = sorted(list(pltdata.keys()))
-    # print(pltdata)
-    from matplotlib import use as mpuse
-    mpuse('agg')
-    from matplotlib import pyplot as plt
-    fig = plt.figure(figsize=[args.W, args.H])
-    ax = fig.add_subplot()
-    if num:
-        ax.bar(sort_k, [int(pltdata[k]) for k in sort_k], width=n)
-    else:
-        ax.bar(sort_k, [int(pltdata[k]) for k in sort_k])
-    ax.set_xlabel(' '.join(args.x))
-    ax.set_ylabel(' '.join(args.y))
-    if args.t is not None: ax.set_title(args.t)
-    if args.xlog: ax.set_xscale('log')
-    if args.ylog: ax.set_yscale('log')
-    if args.xlim is not None: ax.set_xlim([args.xlim[0], args.xlim[1]])
-    if args.ylim is not None: ax.set_ylim([args.ylim[0], args.ylim[1]])
-    ax.minorticks_on()
-    ax.xaxis.grid(True, which='both', linestyle='--')
-    ax.yaxis.grid(True, which='both', linestyle='--')
-    plt.xticks(rotation=args.xltilt)
-    ax.set_axisbelow(True)
-    plt.tight_layout()
-    plt.savefig(args.o.name)
-    fin.close()
-# END
-
-
-def pltbar(args):
-    '''
-    Generate a bar plot for the input. First column needs to be features, second
-    column values
-    '''
-    import sys
-    from collections import OrderedDict
-    logger = mylogger("pltbar")
-    if args.f == 'STDIN':
-        fin = sys.stdin
-
-    else:
-        try:
-            fin = open(args.f, 'r')
-        except FileNotFoundError:
-            logger.error('Cannot open file: {}'.format(args.f))
-            sys.exit()
-    # Read data
-    data = OrderedDict()
-    for line in fin:
-        line = line.strip().split()
-        if len(line) > 2:
-            logger.warning('Input has more than 2 columns. Using the first two columns')
-        try:
-            data[line[0]] = float(line[1])
-        except ValueError:
-            logger.error('Second column contains non numerical values. Exiting.')
-            sys.exit()
-    pltdata = data
-    if args.sx:
-        keys = sorted(list(pltdata.keys()))
-    elif args.sy:
-        keys = sorted(list(pltdata.keys()), key=lambda x: pltdata[x])
-    else:
-        keys = list(pltdata.keys())
-    from matplotlib import use as mpuse
-    mpuse('agg')
-    from matplotlib import pyplot as plt
-    fig = plt.figure(figsize=[args.W, args.H])
-    ax = fig.add_subplot()
-    ax.bar(keys, [int(pltdata[k]) for k in keys])
-    ax.set_xlabel(' '.join(args.x))
-    ax.set_ylabel(' '.join(args.y))
-    if args.t is not None:
-        ax.set_title(args.t)
-    if args.ylog:
-        ax.set_yscale('log')
-    if args.ylim is not None:
-        ax.set_ylim([args.ylim[0], args.ylim[1]])
-    ax.minorticks_on()
-    ax.xaxis.grid(True, which='both', linestyle='--')
-    ax.yaxis.grid(True, which='both', linestyle='--')
-    plt.xticks(rotation=args.xltilt)
-    ax.set_axisbelow(True)
-    plt.tight_layout()
-    plt.savefig(args.o.name)
-    fin.close()
-# END
-
-
-def plotal(args):
-    """
-    Input file format:
-    genome1:chr1:start-end  genome2:chr2:start-end  Colour
-    1:1:2-15        2:1:1-14        #006c66
-    2:1:1-14        3:1:3-16        #006c66
-    3:1:3-16        4:1:1-14        #006c66
-
-    :param args:
-    :return:
-    """
-    from collections import deque
-    import pandas as pd
-    from matplotlib import pyplot as plt
-    from matplotlib.pyplot import get_cmap
-    import matplotlib
-    # Parse arguments
-    finname = args.align.name
-    out = args.out.name
-    DPI = args.D
-    # Read alignments
-    als = deque()
-    with open(finname, 'r') as fin:
-        for line in fin:
-            if line[0] == '#':
-                continue
-            line = line.strip().split()
-            if len(line) == 0:
-                continue
-            s = line[0].split(':')
-            s += s[2].split('-')
-            s.pop(2)
-            e = line[1].split(':')
-            e += e[2].split('-')
-            e.pop(2)
-            als.append(s + e + [line[2]])
-    als = pd.DataFrame(als)
-    als[[2, 3, 6, 7]] = als[[2, 3, 6, 7]].astype(int)
-    ngen = len(set(pd.concat([als[0], als[4]])))
-    gdict = dict(zip(pd.unique(pd.concat([als[0], als[4]])), range(ngen-1, -1, -1)))
-    maxp = als[[2, 3, 6, 7]].max().max()
-    fig = plt.figure(figsize=[5, 4])
-    ax = fig.add_subplot()
-    ax.set_ylim([-0.1, ngen - 1 + 0.1])
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.spines['bottom'].set_visible(False)
-    ax.axes.xaxis.set_visible(False)
-    ax.axes.yaxis.set_visible(False)
-
-
-    if ngen <= 10:
-        CHRCOLS = [matplotlib.colors.to_hex(get_cmap('tab10')(i)) for i in range(ngen)]
-    else:
-        CHRCOLS = [matplotlib.colors.to_hex(get_cmap('gist_rainbow')(int(255/ngen) * i)) for i in range(0, ngen)]
-        if ngen % 2 != 0:
-            m = CHRCOLS[int((ngen/2) + 1)]
-            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i + ngen/2)]]] + [m]
-        else:
-            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i + ngen/2)]]]
-
-    for i in range(ngen):
-        ax.hlines(ngen - 1 - i, 1, maxp,
-                  color=CHRCOLS[i],
-                  linewidth=5,
-                  zorder=2)
-    # print(gdict)
-    for al in als.itertuples(index=False):
-        # zorder = 0 if abs(gdict[al[0]] - gdict[al[4]]) == 1 else 3
-        ax.add_patch(bezierpath(al[2], al[3], al[6], al[7], gdict[al[0]], gdict[al[4]], False, al[8], 1))
-    plt.tight_layout(pad=0, h_pad=0, w_pad=0)
-    plt.savefig(out, dpi=DPI)
-    plt.close()
-    return
-# END
-
-
-def plotref(refidx, varpos, syrireg, figout, bw=100000):
-    """
-    Plots distribution of bed file on a genome annotated with SRs
-    :param refidx: path to ref.faidx
-    :param syrireg: path to syri regions in BEDPE format
-    :param varpos: variant positions in BED
-    :param figout: output figure path
-    :return:
-    """
-    from matplotlib import pyplot as plt
-    from matplotlib.patches import Rectangle
-    from matplotlib.collections import PatchCollection
-    import pybedtools as bt # TODO: remove this dependency
-    from collections import deque, defaultdict
-    import numpy as np
-    import logging
-    logger = logging.getLogger('plotref')
-    def _readbed(vp, refbed):
-        _chrs = set([r[0] for r in refbed])
-        bincnt = defaultdict(deque)
-        skipchrs = []
-        curchr = ''
-        pos = deque()
-        added_chrs = list()
-        with open(vp, 'r') as fin:
-            for line in fin:
-                line = line.strip().split()
-                if len(line) < 3:
-                    logger.warning("Incomplete information in BED file at line: {}. Skipping it.".format("\t".join(line)))
-                    continue
-                if line[0] not in _chrs:
-                    if line[0] not in skipchrs:
-                        logger.info("Chromosome in BED is not present in FASTA or not selected for plotting. Skipping it. BED line: {}".format("\t".join(line)))
-                        skipchrs.append(line[0])
-                    continue
-                if curchr == '':
-                    curchr = line[0]
-                    pos.append([int(line[1]), int(line[2])])
-                elif curchr == line[0]:
-                    pos.append([int(line[1]), int(line[2])])
-                else:
-                    if line[0] in added_chrs:
-                        logger.error("BED file: {} is not sorted. For plotting tracks, sorted bed file is required. Exiting.".format(vp))
-                        sys.exit()
-                    if len(pos) > 1:
-                        rngs = mergeRanges(np.array(pos))
-                    else:
-                        rngs = pos
-                    chrpos = np.array(list(set([i for r in rngs for i in range(r[0], r[1])])))
-                    # Get bin breakpoints for the chromosome
-                    bins = np.concatenate((np.arange(0, [r[2] for r in refbed if r[0] == curchr][0], bw), np.array([r[2] for r in refbed if r[0] == curchr])), axis=0)
-                    binval = np.histogram(chrpos, bins)[0]
-                    bincnt[curchr] = deque([((bins[i] + bins[i+1])/2, binval[i]/bw) for i in range(len(binval))])
-                    added_chrs.append(curchr)
-                    # Set the new chromosome
-                    curchr = line[0]
-                    pos = deque([[int(line[1]), int(line[2])]])
-            if len(pos) > 1:
-                rngs = mergeRanges(np.array(pos))
-            else:
-                rngs = pos
-            chrpos = np.array(list(set([i for r in rngs for i in range(r[0], r[1])])))
-            # Get bin breakpoints for the chromosome
-            bins = np.concatenate((np.arange(0, [r[2] for r in refbed if r[0] == curchr][0], bw), np.array([r[2] for r in refbed if r[0] == curchr])), axis=0)
-            binval = np.histogram(chrpos, bins)[0]
-            bincnt[curchr] = deque([((bins[i] + bins[i+1])/2, binval[i]/bw) for i in range(len(binval))])
-        return bincnt
-    # END
-    chr_height = 0.3
-    th = 0.6    # Track height for plotting bedfile data
-    refbed = readfaidxbed(refidx)
-    # TODO: remove dependency on pybedtools
-    # syrioutbed = bt.BedTool('/srv/netscratch/dep_mercier/grp_schneeberger/projects/read_vs_assembly/results/human/hg002/reads15kb/svcalls/syri/hg002.reads15kb.winnowmap.hap1syri.bedpe').sort()
-    syrioutbed = bt.BedTool(syrireg).sort()
-    bedbin = _readbed(varpos, refbed)
-    fig = plt.figure(figsize=[12, 10])
-    ax = fig.add_subplot()
-    ax.set_ylim([0, len(refbed)+1])
-    ax.set_xlim([0, max([r[2] for r in refbed])])
-    colors = {'SYN': 'lightgrey', 'INV': '#FFA500', 'TRANS': '#9ACD32', 'DUP': '#00BBFF'}
-    peakpos = defaultdict()
-    for i in range(len(refbed)):
-        patches = deque()
-        r = refbed[i]
-        y = len(refbed) - i
-        ax.add_patch(Rectangle((r[1], y), r[2], chr_height, fill=False, linewidth=0.5))
-        # ax.add_patch(Rectangle((r[1], y), r[2], chr_height, linewidth=0.5, color='black'))
-        bed = syrioutbed.filter(lambda b: b.chrom == r[0]).saveas()
-        for b in bed:
-            patches.append(Rectangle((b.start, y), b.stop-b.start, chr_height, color=colors[b[6]], linewidth=0))
-        ax.add_collection(PatchCollection(patches, match_original=True))
-        chrpos = [k[0] for k in bedbin[r[0]]]
-        tpos = [k[1] for k in bedbin[r[0]]]
-        tposmax = max(tpos)
-        y0 = len(refbed) - i + chr_height
-        ypos = [(t*th/tposmax)+y0 for t in tpos]
-        ax.fill_between(chrpos, ypos, y0, color='blue', lw=0.1, zorder=2)
-        y_mid = y0 + (th/2)
-        peakpos[refbed[i][0]] = [(chrpos[j], tpos[j]) for j in range(len(ypos)) if ypos[j] > y_mid]
-    plt.tight_layout()
-    fig.savefig(figout)
-    plt.close()
-    return peakpos
-# END
-
-
-def bezierpath(rs, re, qs, qe, ry, qy, v, col, alpha, label='', lw=0, zorder=0):
-    import matplotlib.patches as patches
-    from matplotlib.path import Path
-    smid = (qs-rs)/2    # Start increment
-    emid = (qe-re)/2    # End increment
-    hmid = (qy-ry)/2    # Height increment
-    if not v:
-        verts = [(rs, ry),
-                 (rs, ry+hmid),
-                 (rs+2*smid, ry+hmid),
-                 (rs+2*smid, ry+2*hmid),
-                 (qe, qy),
-                 (qe, qy-hmid),
-                 (qe-2*emid, qy-hmid),
-                 (qe-2*emid, qy-2*hmid),
-                 (rs, ry),
-                 ]
-    else:
-        verts = [(ry, rs),
-                 (ry+hmid, rs),
-                 (ry+hmid, rs+2*smid),
-                 (ry+2*hmid, rs+2*smid),
-                 (qy, qe),
-                 (qy-hmid, qe),
-                 (qy-hmid, qe-2*emid),
-                 (qy-2*hmid, qe-2*emid),
-                 (ry, rs),
-                 ]
-    codes = [
-        Path.MOVETO,
-        Path.CURVE4,
-        Path.CURVE4,
-        Path.CURVE4,
-        Path.LINETO,
-        Path.CURVE4,
-        Path.CURVE4,
-        Path.CURVE4,
-        Path.CLOSEPOLY,
-    ]
-    path = Path(verts, codes)
-    patch = patches.PathPatch(path, facecolor=col, lw=lw, alpha=alpha, label=label, edgecolor=col, zorder=zorder)
-    return patch
-# END
-
-
-def plotdensity(data):
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from scipy.stats import gaussian_kde
-    density = gaussian_kde(data)
-    xs = np.linspace(min(data), max(data), 1000)
-    density.covariance_factor = lambda: .2
-    density._compute_covariance()
-    plt.plot(xs, density(xs))
-    plt.show()
-# END
-
-
-def getColors(colorPalette, numOfCol):
-    return([colorPalette(i/numOfCol) for i in range(numOfCol)])
 # END
 
 
@@ -1042,6 +657,42 @@ def intersect(*lists):
 # END
 
 
+
+
+
+############################## API #############################################
+## Functions callable from python scripts
+
+
+def revcomp(seq):
+    # end = end if end <= len(q[seqid]) else len(q[seqid])
+    # # Output the selected sequence
+    assert(type(seq) == str)
+    old = 'ACGTRYKMBDHVacgtrykmbdhv'
+    rev = 'TGCAYRMKVHDBtgcayrmkvhdb'
+    tab = str.maketrans(old, rev)
+    return seq.translate(tab)[::-1]
+# END
+
+
+def canonical(seq):
+    """
+    For an input string (seq, k-mer), return the canonical K-mer which is defined as
+    the minimum string between seq and revcomp(seq)
+    """
+    return min(seq, revcomp(seq))
+# END
+
+
+def canonical_kmers(size):
+    """
+    For a given size (n), return all canonical k-mers of size (n)
+    """
+    from itertools import product
+    return sorted(set(map(canonical, map(''.join, product(*['ATGC']*size)))))
+# END
+
+
 def fileRemove(fName):
     try:
         os.remove(fName)
@@ -1055,7 +706,7 @@ def view(d, n=5):
     """
     For some objects, like dict, it is difficult to view just a part of it (like head).
     This function provides a `head` like utility.
-    
+
     NOTE: Should not be used to iterators
     """
     # TODO: Make it work properly
@@ -1078,20 +729,80 @@ def view(d, n=5):
 # END
 
 
-def printdf(df):
+def printdf(df, n=5):
     """
     Takes a DataFrame as input and print all columns
     """
-    print(df.to_string())
+    logger.info(f'printing first {n} rows')
+    print(df.head(n).to_string())
     return
 # END
 
 
-############################## API #############################################
+def rtigercos(bed):
+    """
+    Reads RTIGER output BED file and return the CO table
+    :param bed:
+    :return:
+    """
+    import pandas as pd
+    from collections import deque
+    bed = pd.read_table(bed, header=None)
+    cos = deque()
+    for g in bed.groupby([0]):
+        for i in range(g[1].shape[0] - 1):
+            cos.append([g[0], g[1].iat[i, 2], g[1].iat[i+1, 1], g[1].iat[i, 3], g[1].iat[i+1, 3]])
+    return pd.DataFrame(cos)
+# END
 
 
-############################## CLI #############################################
+def total_size(o, handlers={}, verbose=False):
+    from collections import deque
+    from sys import getsizeof, stderr
+    from itertools import chain
+    try:
+        from reprlib import repr
+    except ImportError as e :
+        sys.exit('missing library' + str(e))
+    """ Returns the approximate memory footprint an object and all of its contents.
 
+    Automatically finds the contents of the following builtin containers and
+    their subclasses:  tuple, list, deque, dict, set and frozenset.
+    To search other containers, add handlers to iterate over their contents:
+
+        handlers = {SomeContainerClass: iter,
+                    OtherContainerClass: OtherContainerClass.get_elements}
+
+    """
+    dict_handler = lambda d: chain.from_iterable(d.items())
+    all_handlers = {tuple: iter,
+                    list: iter,
+                    deque: iter,
+                    dict: dict_handler,
+                    set: iter,
+                    frozenset: iter,
+                    }
+    all_handlers.update(handlers)     # user handlers take precedence
+    seen = set()                      # track which object id's have already been seen
+    default_size = getsizeof(0)       # estimate sizeof object without __sizeof__
+
+    def sizeof(o):
+        if id(o) in seen:       # do not double count the same object
+            return 0
+        seen.add(id(o))
+        s = getsizeof(o, default_size)
+
+        if verbose:
+            print(s, type(o), repr(o), file=stderr)
+
+        for typ, handler in all_handlers.items():
+            if isinstance(o, typ):
+                s += sum(map(sizeof, handler(o)))
+                break
+        return s
+
+    return sizeof(o)
+# END
 
 
 def readblast(f):
@@ -1103,40 +814,142 @@ def readblast(f):
 # END
 
 
-def density_scatter(x, y, ax=None, fig=None, sort=True, bins=20, **kwargs):
+def readsyriout(f, annos=['SYN', 'SYNAL', 'INV', 'TRANS', 'INVTR', 'DUP', 'INVDP']):
     """
-    This ta
+    There is a version in reganno.py as well
     """
-    # TODO: See if this can be converted to a command-line API
+    from collections import OrderedDict, deque
+    import logging
+    import pandas as pd
     import numpy as np
-    import matplotlib.pyplot as plt
-    from matplotlib import cm
-    from matplotlib.colors import Normalize
-    from scipy.interpolate import interpn
-    # import seaborn as sns         # Can be used if regression fit is required, but is not working very well with the scatter kwargs
-    """
-    Scatter plot colored by 2d histogram
-    Usage example:
-        x = np.random.normal(size=100000)
-        y = x * 3 + np.random.normal(size=100000)
-        density_scatter( x, y, bins = [30,30] )
-    """
-    if ax is None:
-        fig, ax = plt.subplots()
-    data, x_e, y_e = np.histogram2d(x, y, bins=bins, density=True)
-    z = interpn((0.5*(x_e[1:] + x_e[:-1]), 0.5*(y_e[1:]+y_e[:-1])), data, np.vstack([x, y]).T, method="splinef2d", bounds_error=False)
-    # To be sure to plot all data
-    z[np.where(np.isnan(z))] = 0.0
-    # Sort the points by density, so that the densest points are plotted last
-    if sort:
-        idx = z.argsort()
-        x, y, z = x[idx], y[idx], z[idx]
-    # ax = sns.regplot(x=x, y=y, scatter_kws={"s": 0.5}, ax=ax)
-    ax.scatter(x, y, c=z, **kwargs)
-    norm = Normalize(vmin=np.min(z), vmax=np.max(z))
-    cbar = fig.colorbar(cm.ScalarMappable(norm=norm), ax=ax)
-    cbar.ax.set_ylabel('Density')
-    return ax
+
+    logger = logging.getLogger("readsyriout")
+    # Reads syri.out. Select: achr, astart, aend, bchr, bstart, bend, srtype
+    # assert(all([v in ['SYN', 'SYNAL', 'INV', 'TRANS', 'INVTR', 'DUP', 'INVDP', 'NOTAL'] for v in annos]))
+    syri_regs = deque()
+    with open(f, 'r') as fin:
+        for line in fin:
+            l = line.strip().split()
+            if l[10] in annos:
+                syri_regs.append(l)
+
+    try:
+        df = pd.DataFrame(list(syri_regs))[[0, 1, 2, 5, 6, 7, 10, 3, 4]]
+        df = df.loc[df[0] != '-']
+    except KeyError:
+        raise ImportError("Incomplete input file {}, syri.out file should have 11 columns.".format(f))
+    df[[0, 5, 10]] = df[[0, 5, 10]].astype(str)
+    try:
+        if 'NOTAL' in annos:
+            df[[1, 2]] = df[[1, 2]].astype(int)
+        else:
+            df[[1, 2, 6, 7]] = df[[1, 2, 6, 7]].astype(int)
+    except ValueError:
+        raise ValueError("Non-numerical values used as genome coordinates in {}. Exiting".format(f))
+
+    df.sort_values([0, 1, 2], inplace=True)
+    # chr ID map: DO NOT DELETE AS WILL BE USED IN SOME FUNCTIONS
+    # chrid = []
+    # chrid_dict = OrderedDict()
+    # for i in np.unique(df[0]):
+    #     chrid.append((i, np.unique(df.loc[(df[0] == i) & (df[10] == 'SYN'), 5])[0]))
+    #     chrid_dict[i] = np.unique(df.loc[(df[0] == i) & (df[10] == 'SYN'), 5])[0]
+    # df.columns = ['achr', 'astart', 'aend', 'bchr', 'bstart', 'bend',  'type']
+
+    return df
+# END
+
+
+def samtocoords(f):
+    '''
+    Reads a SAM file and converts it to a align coords file
+    '''
+    # TODO: adjust this function to work similarly to bam2coords
+    from pandas import DataFrame
+    from collections import deque
+    # logger = logging.getLogger('SAM reader')
+    logger = mylogger("SAM reader")
+    rc = {}        # Referece chromosomes
+    rcs = {}        # Selected chromosomes
+    al = deque()    # Individual alignment
+    try:
+        with open(f, 'r') as fin:
+            for l in fin:
+                if l[:3] == '@SQ':
+                    c, s = 0, 0
+                    for h in l.strip().split()[1:]:
+                        h = h.split(':')
+                        if h[0] == 'SN': c = h[1]
+                        if h[0] == 'LN': s = int(h[1])
+                    rcs[c] = s
+                    continue
+                elif l[0] == '@': continue
+
+                l = l.split('\t')[:6]
+                # if l[1] == '2064': break
+                if l[2] == '*':
+                    logger.warning(l[0]+ ' do not align with any reference sequence and cannot be analysed. Remove all unplaced scaffolds and contigs from the assemblies.')  # Skip rows corresponding to non-mapping sequences (contigs/scaffolds)
+                    continue
+
+                if 'M' in l[5]:
+                    logger.error('Incorrect CIGAR string found. CIGAR string can only have I/D/H/S/X/=. CIGAR STRING: ' + l[5])
+                    sys.exit()
+                cgt = [[int(j[0]), j[1]] for j in [i.split(';') for i in l[5].replace('S', ';S,').replace('H', ';H,').replace('=', ';=,').replace('X', ';X,').replace('I', ';I,').replace('D', ';D,').split(',')[:-1]]]
+                if len(cgt) > 2:
+                    if True in [True if i[1] in ['S', 'H'] else False for i in cgt[1:-1]]:
+                        logger.error("Incorrect CIGAR string found. Clipped bases inside alignment. H/S can only be in the terminal. CIGAR STRING: " + l[5])
+                        sys.exit()
+
+                bf = '{:012b}'.format(int(l[1]))
+
+                rs = int(l[3])
+                re = rs - 1 + sum([i[0] for i in cgt if i[1] in ['X', '=', 'D']])
+
+                if bf[7] == '0':    # forward alignment
+                    if cgt[0][1] == '=':
+                        qs = 1
+                    elif cgt[0][1] in ['S', 'H']:
+                        qs = cgt[0][0] + 1
+                    else:
+                        print('ERROR: CIGAR string starting with non-matching base')
+                    qe = qs - 1 + sum([i[0] for i in cgt if i[1] in ['X', '=', 'I']])
+                elif bf[7] == '1':  # inverted alignment
+                    if cgt[-1][1] == '=':
+                        qs = 1
+                    elif cgt[-1][1] in ['S', 'H']:
+                        qs = cgt[-1][0] + 1
+                    else:
+                        print('ERROR: CIGAR string starting with non-matching base')
+                    qe = qs - 1 + sum([i[0] for i in cgt if i[1] in ['X', '=', 'I']])
+                    qs, qe = qe, qs
+
+                al.append([
+                    rs,
+                    re,
+                    qs,
+                    qe,
+                    abs(re-rs) + 1,
+                    abs(qs-qe) + 1,
+                    format((sum([i[0] for i in cgt if i[1] == '=']) / sum(
+                        [i[0] for i in cgt if i[1] in ['=', 'X', 'I', 'D']])) * 100, '.2f'),
+                    1,
+                    1 if bf[7] == '0' else -1,
+                    l[2],
+                    l[0],
+                    "".join([str(i[0])+i[1] for i in cgt if i[1] in ['=', 'X', 'I', 'D']])
+                ])
+                rcs[l[2]] = 1
+            rcs = list(rcs.keys())
+            for k in list(rc.keys()):
+                if k not in rcs: logger.warning(l[0]+ ' do not align with any query sequence and cannot be analysed. Remove all unplaced scaffolds and contigs from the assemblies.')
+    except Exception as e:
+        logger.error('Error in reading SAM file: ' + str(e))
+        sys.exit()
+    al = DataFrame(list(al))
+    al[6] = al[6].astype('float')
+    al.sort_values([9,0,1,2,3,10], inplace = True, ascending=True)
+    al.index = range(len(al.index))
+    return al
 # END
 
 
@@ -1203,35 +1016,6 @@ def extractseq(args):
 # END
 
 
-def revcomp(seq):
-        # end = end if end <= len(q[seqid]) else len(q[seqid])
-        # # Output the selected sequence
-    assert(type(seq) == str)
-    old = 'ACGTRYKMBDHVacgtrykmbdhv'
-    rev = 'TGCAYRMKVHDBtgcayrmkvhdb'
-    tab = str.maketrans(old, rev)
-    return seq.translate(tab)[::-1]
-# END
-
-
-def canonical(seq):
-    """
-    For an input string (seq, k-mer), return the canonical K-mer which is defined as
-    the minimum string between seq and revcomp(seq)
-    """
-    return min(seq, revcomp(seq))
-# END
-
-
-def canonical_kmers(size):
-    """
-    For a given size (n), return all canonical k-mers of size (n)
-    """
-    from itertools import product
-    return set(map(canonical, map(''.join, product(*['ATGC']*size))))
-# END
-
-
 def subnuc(args):
     from Bio.SeqIO import parse, write
     from Bio.Seq import Seq
@@ -1255,71 +1039,227 @@ def subnuc(args):
                 spacer = "\n"
 # END
 
+## Plotting
 
-def rtigercos(bed):
+def plthist(args):
+    import sys
+    import warnings
+    if args.f == 'STDIN': fin = sys.stdin
+    else:
+        try:
+            fin = open(args.f, 'r')
+        except FileNotFoundError:
+            raise FileNotFoundError(' Cannot open file: {}'.format(args.f))
+            sys.exit()
+
+    # Read data
+    data = {}
+    for line in fin:
+        line = line.strip().split()
+        if len(line) > 2: raise warnings.warn('Input has more than 2 columns. Using the first two columns')
+        try:
+            data[line[1]] = float(line[0])
+        except ValueError:
+            raise ValueError('First column contains non numerical values')
+            sys.exit()
+    # Check if keys are numeric
+    num = True
+    for k in data.keys():
+        try:
+            a = float(k)
+        except ValueError:
+            num = False
+            break
+    # print(num)
+    if num:
+        if args.xlim is not None:
+            MIN, MAX = args.xlim[0], args.xlim[1]
+            pltdata = {float(k): v for k, v in data.items() if float(k) <= MAX and float(k) >= MIN}
+        else :
+            pltdata = {float(k): v for k, v in data.items()}
+            MIN = min(list(pltdata.keys()))
+            MAX = max(list(pltdata.keys()))
+        pltdata2 = {}
+        m = MIN
+        n = (MAX - MIN)/args.n
+        for i in range(args.n):
+            pltdata2[(m, m+n)] = 0
+            m +=n
+        for k, v in pltdata.items():
+            for k2 in pltdata2.keys():
+                if k >= k2[0] and k <k2[1]:
+                    pltdata2[k2] += v
+
+        pltdata = {(k[0]+k[1])/2 : v for k, v in pltdata2.items()}
+    else:
+        pltdata = data
+
+    sort_k = sorted(list(pltdata.keys()))
+    # print(pltdata)
+    from matplotlib import use as mpuse
+    mpuse('agg')
+    from matplotlib import pyplot as plt
+    fig = plt.figure(figsize=[args.W, args.H])
+    ax = fig.add_subplot()
+    if num:
+        ax.bar(sort_k, [int(pltdata[k]) for k in sort_k], width=n)
+    else:
+        ax.bar(sort_k, [int(pltdata[k]) for k in sort_k])
+    ax.set_xlabel(' '.join(args.x))
+    ax.set_ylabel(' '.join(args.y))
+    if args.t is not None: ax.set_title(args.t)
+    if args.xlog: ax.set_xscale('log')
+    if args.ylog: ax.set_yscale('log')
+    if args.xlim is not None: ax.set_xlim([args.xlim[0], args.xlim[1]])
+    if args.ylim is not None: ax.set_ylim([args.ylim[0], args.ylim[1]])
+    ax.minorticks_on()
+    ax.xaxis.grid(True, which='both', linestyle='--')
+    ax.yaxis.grid(True, which='both', linestyle='--')
+    plt.xticks(rotation=args.xltilt)
+    ax.set_axisbelow(True)
+    plt.tight_layout()
+    plt.savefig(args.o.name)
+    fin.close()
+# END
+
+
+def pltbar(args):
+    '''
+    Generate a bar plot for the input. First column needs to be features, second
+    column values
+    '''
+    import sys
+    from collections import OrderedDict
+    logger = mylogger("pltbar")
+    if args.f == 'STDIN':
+        fin = sys.stdin
+
+    else:
+        try:
+            fin = open(args.f, 'r')
+        except FileNotFoundError:
+            logger.error('Cannot open file: {}'.format(args.f))
+            sys.exit()
+    # Read data
+    data = OrderedDict()
+    for line in fin:
+        line = line.strip().split()
+        if len(line) > 2:
+            logger.warning('Input has more than 2 columns. Using the first two columns')
+        try:
+            data[line[0]] = float(line[1])
+        except ValueError:
+            logger.error('Second column contains non numerical values. Exiting.')
+            sys.exit()
+    pltdata = data
+    if args.sx:
+        keys = sorted(list(pltdata.keys()))
+    elif args.sy:
+        keys = sorted(list(pltdata.keys()), key=lambda x: pltdata[x])
+    else:
+        keys = list(pltdata.keys())
+    from matplotlib import use as mpuse
+    mpuse('agg')
+    from matplotlib import pyplot as plt
+    fig = plt.figure(figsize=[args.W, args.H])
+    ax = fig.add_subplot()
+    ax.bar(keys, [int(pltdata[k]) for k in keys])
+    ax.set_xlabel(' '.join(args.x))
+    ax.set_ylabel(' '.join(args.y))
+    if args.t is not None:
+        ax.set_title(args.t)
+    if args.ylog:
+        ax.set_yscale('log')
+    if args.ylim is not None:
+        ax.set_ylim([args.ylim[0], args.ylim[1]])
+    ax.minorticks_on()
+    ax.xaxis.grid(True, which='both', linestyle='--')
+    ax.yaxis.grid(True, which='both', linestyle='--')
+    plt.xticks(rotation=args.xltilt)
+    ax.set_axisbelow(True)
+    plt.tight_layout()
+    plt.savefig(args.o.name)
+    fin.close()
+# END
+
+
+def plotal(args):
     """
-    Reads RTIGER output BED file and return the CO table
-    :param bed:
+    Input file format:
+    genome1:chr1:start-end  genome2:chr2:start-end  Colour
+    1:1:2-15        2:1:1-14        #006c66
+    2:1:1-14        3:1:3-16        #006c66
+    3:1:3-16        4:1:1-14        #006c66
+
+    :param args:
     :return:
     """
+    from collections import deque
     import pandas as pd
-    from collections import deque
-    bed = pd.read_table(bed, header=None)
-    cos = deque()
-    for g in bed.groupby([0]):
-        for i in range(g[1].shape[0] - 1):
-            cos.append([g[0], g[1].iat[i, 2], g[1].iat[i+1, 1], g[1].iat[i, 3], g[1].iat[i+1, 3]])
-    return pd.DataFrame(cos)
+    from matplotlib import pyplot as plt
+    from matplotlib.pyplot import get_cmap
+    import matplotlib
+    # Parse arguments
+    finname = args.align.name
+    out = args.out.name
+    DPI = args.D
+    # Read alignments
+    als = deque()
+    with open(finname, 'r') as fin:
+        for line in fin:
+            if line[0] == '#':
+                continue
+            line = line.strip().split()
+            if len(line) == 0:
+                continue
+            s = line[0].split(':')
+            s += s[2].split('-')
+            s.pop(2)
+            e = line[1].split(':')
+            e += e[2].split('-')
+            e.pop(2)
+            als.append(s + e + [line[2]])
+    als = pd.DataFrame(als)
+    als[[2, 3, 6, 7]] = als[[2, 3, 6, 7]].astype(int)
+    ngen = len(set(pd.concat([als[0], als[4]])))
+    gdict = dict(zip(pd.unique(pd.concat([als[0], als[4]])), range(ngen-1, -1, -1)))
+    maxp = als[[2, 3, 6, 7]].max().max()
+    fig = plt.figure(figsize=[5, 4])
+    ax = fig.add_subplot()
+    ax.set_ylim([-0.1, ngen - 1 + 0.1])
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.axes.xaxis.set_visible(False)
+    ax.axes.yaxis.set_visible(False)
+
+
+    if ngen <= 10:
+        CHRCOLS = [matplotlib.colors.to_hex(get_cmap('tab10')(i)) for i in range(ngen)]
+    else:
+        CHRCOLS = [matplotlib.colors.to_hex(get_cmap('gist_rainbow')(int(255/ngen) * i)) for i in range(0, ngen)]
+        if ngen % 2 != 0:
+            m = CHRCOLS[int((ngen/2) + 1)]
+            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i + ngen/2)]]] + [m]
+        else:
+            CHRCOLS = [j for i in range(int(ngen/2)) for j in [CHRCOLS[i]] + [CHRCOLS[int(i + ngen/2)]]]
+
+    for i in range(ngen):
+        ax.hlines(ngen - 1 - i, 1, maxp,
+                  color=CHRCOLS[i],
+                  linewidth=5,
+                  zorder=2)
+    # print(gdict)
+    for al in als.itertuples(index=False):
+        # zorder = 0 if abs(gdict[al[0]] - gdict[al[4]]) == 1 else 3
+        ax.add_patch(bezierpath(al[2], al[3], al[6], al[7], gdict[al[0]], gdict[al[4]], False, al[8], 1))
+    plt.tight_layout(pad=0, h_pad=0, w_pad=0)
+    plt.savefig(out, dpi=DPI)
+    plt.close()
+    return
 # END
 
-
-def total_size(o, handlers={}, verbose=False):
-    from collections import deque
-    from sys import getsizeof, stderr
-    from itertools import chain
-    try:
-        from reprlib import repr
-    except ImportError as e :
-        sys.exit('missing library' + str(e))
-    """ Returns the approximate memory footprint an object and all of its contents.
-
-    Automatically finds the contents of the following builtin containers and
-    their subclasses:  tuple, list, deque, dict, set and frozenset.
-    To search other containers, add handlers to iterate over their contents:
-
-        handlers = {SomeContainerClass: iter,
-                    OtherContainerClass: OtherContainerClass.get_elements}
-
-    """
-    dict_handler = lambda d: chain.from_iterable(d.items())
-    all_handlers = {tuple: iter,
-                    list: iter,
-                    deque: iter,
-                    dict: dict_handler,
-                    set: iter,
-                    frozenset: iter,
-                   }
-    all_handlers.update(handlers)     # user handlers take precedence
-    seen = set()                      # track which object id's have already been seen
-    default_size = getsizeof(0)       # estimate sizeof object without __sizeof__
-
-    def sizeof(o):
-        if id(o) in seen:       # do not double count the same object
-            return 0
-        seen.add(id(o))
-        s = getsizeof(o, default_size)
-
-        if verbose:
-            print(s, type(o), repr(o), file=stderr)
-
-        for typ, handler in all_handlers.items():
-            if isinstance(o, typ):
-                s += sum(map(sizeof, handler(o)))
-                break
-        return s
-
-    return sizeof(o)
-# END
 
 
 def getscaf(args):
@@ -2031,6 +1971,9 @@ def faline(args):
 
 
 def shannon_seq(seq):
+    """
+    For a given sequence, return its Shannon-index
+    """
     from collections import deque, Counter
     from math import log
     freq = Counter(seq)
@@ -2253,145 +2196,6 @@ def runsryi(args):
     proc = Popen(f'syri -c {alfile} -r {ref} -q {qry} -F {altype[0].upper()} --prefix {prefix} --nc {N}'.split())
     proc.wait()
     return
-# END
-
-
-def readsyriout(f, annos=['SYN', 'SYNAL', 'INV', 'TRANS', 'INVTR', 'DUP', 'INVDP']):
-    """
-    There is a version in reganno.py as well
-    """
-    from collections import OrderedDict, deque
-    import logging
-    import pandas as pd
-    import numpy as np
-
-    logger = logging.getLogger("readsyriout")
-    # Reads syri.out. Select: achr, astart, aend, bchr, bstart, bend, srtype
-    # assert(all([v in ['SYN', 'SYNAL', 'INV', 'TRANS', 'INVTR', 'DUP', 'INVDP', 'NOTAL'] for v in annos]))
-    syri_regs = deque()
-    with open(f, 'r') as fin:
-        for line in fin:
-            l = line.strip().split()
-            if l[10] in annos:
-                syri_regs.append(l)
-
-    try:
-        df = pd.DataFrame(list(syri_regs))[[0, 1, 2, 5, 6, 7, 10, 3, 4]]
-        df = df.loc[df[0] != '-']
-    except KeyError:
-        raise ImportError("Incomplete input file {}, syri.out file should have 11 columns.".format(f))
-    df[[0, 5, 10]] = df[[0, 5, 10]].astype(str)
-    try:
-        if 'NOTAL' in annos:
-            df[[1, 2]] = df[[1, 2]].astype(int)
-        else:
-            df[[1, 2, 6, 7]] = df[[1, 2, 6, 7]].astype(int)
-    except ValueError:
-        raise ValueError("Non-numerical values used as genome coordinates in {}. Exiting".format(f))
-
-    df.sort_values([0, 1, 2], inplace=True)
-    # chr ID map: DO NOT DELETE AS WILL BE USED IN SOME FUNCTIONS
-    # chrid = []
-    # chrid_dict = OrderedDict()
-    # for i in np.unique(df[0]):
-    #     chrid.append((i, np.unique(df.loc[(df[0] == i) & (df[10] == 'SYN'), 5])[0]))
-    #     chrid_dict[i] = np.unique(df.loc[(df[0] == i) & (df[10] == 'SYN'), 5])[0]
-    # df.columns = ['achr', 'astart', 'aend', 'bchr', 'bstart', 'bend',  'type']
-
-    return df
-# END
-
-
-def samtocoords(f):
-    '''
-    Reads a SAM file and converts it to a align coords file
-    '''
-    # TODO: adjust this function to work similarly to bam2coords
-    from pandas import DataFrame
-    from collections import deque
-    # logger = logging.getLogger('SAM reader')
-    logger = mylogger("SAM reader")
-    rc = {}        # Referece chromosomes
-    rcs = {}        # Selected chromosomes
-    al = deque()    # Individual alignment
-    try:
-        with open(f, 'r') as fin:
-            for l in fin:
-                if l[:3] == '@SQ':
-                    c, s = 0, 0
-                    for h in l.strip().split()[1:]:
-                        h = h.split(':')
-                        if h[0] == 'SN': c = h[1]
-                        if h[0] == 'LN': s = int(h[1])
-                    rcs[c] = s
-                    continue
-                elif l[0] == '@': continue
-
-                l = l.split('\t')[:6]
-                # if l[1] == '2064': break
-                if l[2] == '*':
-                    logger.warning(l[0]+ ' do not align with any reference sequence and cannot be analysed. Remove all unplaced scaffolds and contigs from the assemblies.')  # Skip rows corresponding to non-mapping sequences (contigs/scaffolds)
-                    continue
-
-                if 'M' in l[5]:
-                    logger.error('Incorrect CIGAR string found. CIGAR string can only have I/D/H/S/X/=. CIGAR STRING: ' + l[5])
-                    sys.exit()
-                cgt = [[int(j[0]), j[1]] for j in [i.split(';') for i in l[5].replace('S', ';S,').replace('H', ';H,').replace('=', ';=,').replace('X', ';X,').replace('I', ';I,').replace('D', ';D,').split(',')[:-1]]]
-                if len(cgt) > 2:
-                    if True in [True if i[1] in ['S', 'H'] else False for i in cgt[1:-1]]:
-                        logger.error("Incorrect CIGAR string found. Clipped bases inside alignment. H/S can only be in the terminal. CIGAR STRING: " + l[5])
-                        sys.exit()
-
-                bf = '{:012b}'.format(int(l[1]))
-
-                rs = int(l[3])
-                re = rs - 1 + sum([i[0] for i in cgt if i[1] in ['X', '=', 'D']])
-
-                if bf[7] == '0':    # forward alignment
-                    if cgt[0][1] == '=':
-                        qs = 1
-                    elif cgt[0][1] in ['S', 'H']:
-                        qs = cgt[0][0] + 1
-                    else:
-                        print('ERROR: CIGAR string starting with non-matching base')
-                    qe = qs - 1 + sum([i[0] for i in cgt if i[1] in ['X', '=', 'I']])
-                elif bf[7] == '1':  # inverted alignment
-                    if cgt[-1][1] == '=':
-                        qs = 1
-                    elif cgt[-1][1] in ['S', 'H']:
-                        qs = cgt[-1][0] + 1
-                    else:
-                        print('ERROR: CIGAR string starting with non-matching base')
-                    qe = qs - 1 + sum([i[0] for i in cgt if i[1] in ['X', '=', 'I']])
-                    qs, qe = qe, qs
-
-                al.append([
-                    rs,
-                    re,
-                    qs,
-                    qe,
-                    abs(re-rs) + 1,
-                    abs(qs-qe) + 1,
-                    format((sum([i[0] for i in cgt if i[1] == '=']) / sum(
-                        [i[0] for i in cgt if i[1] in ['=', 'X', 'I', 'D']])) * 100, '.2f'),
-                    1,
-                    1 if bf[7] == '0' else -1,
-                    l[2],
-                    l[0],
-                    "".join([str(i[0])+i[1] for i in cgt if i[1] in ['=', 'X', 'I', 'D']])
-                ])
-                rcs[l[2]] = 1
-            rcs = list(rcs.keys())
-            for k in list(rc.keys()):
-                if k not in rcs: logger.warning(l[0]+ ' do not align with any query sequence and cannot be analysed. Remove all unplaced scaffolds and contigs from the assemblies.')
-    except Exception as e:
-        logger.error('Error in reading SAM file: ' + str(e))
-        sys.exit()
-    al = DataFrame(list(al))
-    al[6] = al[6].astype('float')
-    al.sort_values([9,0,1,2,3,10], inplace = True, ascending=True)
-    al.index = range(len(al.index))
-    return al
 # END
 
 
@@ -2646,7 +2450,7 @@ def cntkmer(args):
     None
     """
     import re
-    logger = mylogger('cntkmer')
+    # logger = mylogger('cntkmer')
     fasta = args.fasta.name
     kmer = args.kmer
     cano = args.canonical
@@ -2666,8 +2470,37 @@ def cntkmer(args):
 
     print(f'Number of occurence of K-mer {kmer}: {count}')
     logger.info('Finished')
+    logger.propagate = False
+    return count
+# END
+
+
+def xls2csv(args):
+    """
+    Converts one or more sheets from an excel file into one txt file
+    """
+    import pandas as pd
+    xls = args.xls.name
+    fout = args.output.name
+    sheets = 0 if args.s is None else None if args.s == ['all'] else args.s
+    addname = args.n
+    logger.info(f"Reading {xls}.")
+    data = pd.read_excel(xls, sheet_name=sheets)
+    if isinstance(data, pd.core.frame.DataFrame):
+        outdict = data
+    elif isinstance(data, dict):
+        outdict = pd.DataFrame()
+        for k, v in data.items():
+            df = v.copy()
+            if addname:
+                df['sheet'] = k
+            outdict = pd.concat([outdict, df])
+    logger.info(f"Writing to {fout}.")
+    outdict.to_csv(fout, index=False, header=True, sep='\t' if fout[-4:] == ".tsv" else ',')
+    logger.info('Finished')
     return
 # END
+
 
 def main(cmd):
     parser = argparse.ArgumentParser("Collections of command-line functions to perform common pre-processing and analysis functions.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -2725,10 +2558,19 @@ def main(cmd):
     parser_getcol = subparsers.add_parser("getcol", help="Table:Select columns from a TSV or CSV file using column names", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # TODO: Add functionality for sampling rows
     parser_samplerow = subparsers.add_parser("smprow", help="Table:Select random rows from a text file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_xls2tsv = subparsers.add_parser("xls2csv", help="Table:Convert excel tables to .tsv/.csv", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
+
+    # xls2csv
+    parser_xls2tsv.set_defaults(func=xls2csv)
+    parser_xls2tsv.add_argument("xls", help="Input excel file", type=argparse.FileType('r'))
+    parser_xls2tsv.add_argument("output", help="Output file name", type=argparse.FileType('w'))
+    parser_xls2tsv.add_argument("-s", help="Sheet names or 0-based index for selecting multiple sheets. Default selects first sheet (index 0). 'all' selects all sheets.", type=str, nargs='+')
+    parser_xls2tsv.add_argument("-n", help="Add sheet name as extra column. Used when multiple sheets are selected.", default=False, action='store_true')
+
 
     # cntkmer
     parser_cntkmer.set_defaults(func=cntkmer)

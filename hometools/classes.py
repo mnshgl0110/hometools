@@ -404,7 +404,8 @@ class CustomFormatter(logging.Formatter):
     red = "\x1b[0;49;31m"
     bold_red = "\x1b[0;49;31;21m"
     reset = "\x1b[0m"
-    format = "%(asctime)s - %(levelname)s - %(filename)s:%(name)s:%(lineno)d - %(message)s "
+    # format = "%(asctime)s - %(levelname)s - %(filename)s:%(name)s:%(lineno)d - %(message)s "
+    format = "%(asctime)s - %(levelname)s - %(filename)s:%(funcName)s:%(lineno)d - %(message)s "
 
     FORMATS = {
         logging.DEBUG: grey + format + reset,

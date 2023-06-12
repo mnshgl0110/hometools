@@ -1,7 +1,8 @@
 from setuptools import setup, find_packages
+from hometools import __version__
 
 setup(name="hometools",
-      version='0.1',
+      version='{}'.format(__version__),
       description='Collections of command-line functions to perform common pre-processing and analysis functions',
       author='Manish Goel',
       author_email='goel@mpipz.mpg.de',
