@@ -344,6 +344,14 @@ def mergeRanges(ranges):
 # END
 
 
+def sumranges(r):
+    """
+    Takes a 2D numpy array of non-overlapping ranges and output total length of the ranges
+    """
+    return sum(r[:, 1] - r[:, 0] + 1)
+# END
+
+
 def subranges(r1, r2):
     """
     Subtract range2 (r2) from range1 (r1) and return non-overlaping range.
@@ -1262,7 +1270,6 @@ def plotal(args):
 # END
 
 
-
 def getscaf(args):
     import numpy as np
     logger = mylogger("Get Scaffolds")
@@ -2099,7 +2106,7 @@ def reg_str_to_list(regstr):
 
 def mapbp(args):
     """
-    Outputs mapping positions for the given reference genome coordinate
+        Outputs mapping positions for the given reference genome coordinate
     """
     import pysam
     from collections import defaultdict, deque
@@ -2113,34 +2120,38 @@ def mapbp(args):
     # END 
 
     sfin = args.anno.name if args.anno is not None else None           # input syri.out file
-    hassfin = True if sfin is not None else False
     mapfin = args.map.name
     d = args.d
     pos = reg_str_to_list(args.pos)
-    pos[2] = pos[2] + 1                 # Edit end coordinate to make it suitable for working with syri.out file. Need to be done because syri.out is not in BED format as expected by pysam
+
     # if syri output is provided, select alignments selected by syri
-    if hassfin:
+    if sfin is not None:
+        #TODO: Validate that this works correctly when syri output file is also provided
+        logger.info(f'Syri output is provided. reading file: {sfin}')
         qryreg = defaultdict(deque)
         sout = pysam.TabixFile(sfin)
-        poso = getsyripos(sout, pos)    # Positions overlapping
+        possyri = pos.copy()
+        possyri[1] += 1
+        possyri[2] += 1                 # Edit end coordinate to make it suitable for working with syri.out file. Need to be done because syri.out is not in BED format as expected by pysam
+        poso = getsyripos(sout, possyri)    # Positions overlapping
         if len(poso) == 1:
-            if poso[0][10] == 'NOTAL':
-                # print('NOTAL')
+            if poso[0][7] == 'NOTAL':
                 return 'NOTAL'
         for p in poso:
-            if 'AL' in p[10]:
-                qryreg[p[5]].append([int(p[6]), int(p[7])])
+            if 'AL' in p[6]:
+                qryreg[p[3]].append([int(p[4]), int(p[5])])
+    logger.info(f"Reading BAM file: {mapfin}")
     bam = pysam.AlignmentFile(mapfin)
     for al in bam.fetch(*pos):
         dircg = al.cigartuples #if al.is_forward else al.cigartuples[::-1]
         qs = al.qstart + (dircg[0][1] if dircg[0][0] == 5 else 0) + 1
         qe = qs + al.qlen - 1
-        if hassfin:
+        if sfin is not None:
             if al.query_name not in qryreg:
                 continue
-            if [qs, qe] not in qryreg[al.reference_name]:
+            if [qs, qe] not in qryreg[al.query_name]:
                 continue
-        n = pos[2] - 1 - al.reference_start
+        n = pos[2] - al.reference_start
         p = qs + cgwalk(cgtpl(al.cigarstring, to_int=True), n) - 1
         if not al.is_forward:
             qlen = cggenlen(al.cigarstring, 'q', full=True)
@@ -2149,6 +2160,8 @@ def mapbp(args):
         if d:
             out = out + '\t+' if al.is_forward else out + '\t-'
         print(out)
+    logger.info('Finished')
+    return
 # END
 
 
@@ -2506,7 +2519,8 @@ def xls2csv(args):
 def main(cmd):
     parser = argparse.ArgumentParser("Collections of command-line functions to perform common pre-processing and analysis functions.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     subparsers = parser.add_subparsers()
-    ## FASTA Commands
+
+    # <editor-fold desc="FASTA Commands">
     parser_getchr = subparsers.add_parser("getchr", help=hyellow("FASTA: Get specific chromosomes from the fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_sampfa  = subparsers.add_parser("sampfa", help=hyellow("FASTA: Sample random sequences from a fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_exseq = subparsers.add_parser("exseq", help= hyellow("FASTA: extract sequence from fasta"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -2524,7 +2538,7 @@ def main(cmd):
     parser_revcompseq = subparsers.add_parser("revcompseq", help=hyellow("FASTA: Reverse complement specific chromosomes in a fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_splitfa = subparsers.add_parser("splitfa", help=hyellow("FASTA: Split fasta files to individual sequences. Each sequence is saved in a separate file."), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_cntkmer = subparsers.add_parser("countkmer", help=hyellow("FASTA: Count the number of occurence of a given kmer in a fasta file."), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
+    # </editor-fold>
 
     ## BAM
     parser_bamcov = subparsers.add_parser("bamcov", help="BAM: Get mean read-depth for chromosomes from a BAM file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -2578,7 +2592,6 @@ def main(cmd):
     parser_cntkmer.add_argument("fasta", help="Input fasta file", type=argparse.FileType('r'))
     parser_cntkmer.add_argument("kmer", help="Kmer to find in fasta", type=str)
     parser_cntkmer.add_argument("--canonical", help="Count both the kmer and its reverse complement", default=False, action='store_true')
-    # parser_cntkmer.add_argument("--loci", help="Also output locus of each kmer", action='store_true')
 
 
     # splitfa
@@ -2609,7 +2622,6 @@ def main(cmd):
     # parser_plotbar.add_argument("-xlim", help="Set X-axis limit for numerical data", nargs=2, type=int)
     parser_plotbar.add_argument("--ylim", help="Set Y-axis limit for numerical data", nargs=2, type=int)
     parser_plotbar.add_argument("-t", help="title of the plot", type=str, default=None)
-    # parser_plotbar.add_argument("-n", help="Number of bins", type=int, default=100)
 
 
     # bam2coords
@@ -2657,7 +2669,7 @@ def main(cmd):
     parser_mapbp.set_defaults(func=mapbp)
     parser_mapbp.add_argument("pos", help='Genome position in \'chr:start-end\' format.', type=str)
     parser_mapbp.add_argument("map", help='Alignment file in BAM/PAF format.', type=argparse.FileType('r'))
-    parser_mapbp.add_argument("--anno", help='Syri annotation file. Only alignments present in the syri output would be selected. Need indexed with tabix.', type=argparse.FileType('r'))
+    parser_mapbp.add_argument("--anno", help='Syri annotation file. Only alignments present in the syri output would be selected. Need syri.out to be sorted and indexed with tabix. Use: hometools syridx.', type=argparse.FileType('r'))
     parser_mapbp.add_argument("-d", help='Output alignment strand (sense(+)/antisense(-))', default=False, action='store_true')
 
 
