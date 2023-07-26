@@ -2463,25 +2463,51 @@ def cntkmer(args):
     Returns:
     None
     """
-    import re
+    def getloc(seq, k, loc):
+        import re
+        location = []
+        if loc:
+            location = [r.start() for r in re.finditer(f'(?=({k}))', seq)]
+            count = len(location)
+        else:
+            count = len(re.findall(f'(?=({k}))', seq))
+        return location, count
+    # END
+
+    from collections import deque
+    import pandas as pd
     # logger = mylogger('cntkmer')
     fasta = args.fasta.name
-    kmer = args.kmer
+    kmer = args.kmer.upper()
     cano = args.canonical
+    loc = args.loc
+    if loc:
+        locfin = args.locfin.name if args.locfin.name is not None else f"kmer_{kmer}_locations.bed"
     count = 0
-    kmerlower = kmer.lower()
+    locations = deque()
+    # kmerlower = kmer.lower()
     kmerrc = revcomp(kmer) if cano else ''
-    kmerrclower = revcomp(kmer).lower() if cano else ''
-    selectedkmer = [s for s in [kmer, kmerlower, kmerrc, kmerrclower] if s != '']
-    logger.info(f'Kmer strings to search: {selectedkmer}')
+    # kmerrclower = revcomp(kmer).lower() if cano else ''
+    if cano:
+        kmers = [kmer, kmerrc]
+    else:
+        kmers = [kmer]
+    # selectedkmer = [s for s in [kmer, kmerlower, kmerrc, kmerrclower] if s != '']
+    logger.info(f'Kmer strings to search: {kmers}')
     logger.info(f"Reading {fasta}")
+    lenk = len(kmer)
     for chrom, seq in readfasta_iterator(open(fasta, 'r'), isgzip(fasta)):
-        count += len(re.findall(f'(?=({kmer}))', seq))
-        count += len(re.findall(f'(?=({kmerlower}))', seq))
-        if cano:
-            count += len(re.findall(f'(?=({kmerrc}))', seq))
-            count += len(re.findall(f'(?=({kmerrclower}))', seq))
-
+        seq = seq.upper()
+        for k in kmers:
+            location, cnt = getloc(seq, k, loc)
+            if loc:
+                locations.extend([(chrom, l, l+lenk, k) for l in location])
+            count += cnt
+    if loc:
+        if len(locations) > 0:
+            locations = pd.DataFrame(locations)
+            locations.sort_values([0, 1], inplace=True)
+            locations.to_csv(locfin, sep='\t', index=False, header=False)
     print(f'Number of occurence of K-mer {kmer}: {count}')
     logger.info('Finished')
     logger.propagate = False
@@ -2540,13 +2566,15 @@ def main(cmd):
     parser_cntkmer = subparsers.add_parser("countkmer", help=hyellow("FASTA: Count the number of occurence of a given kmer in a fasta file."), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # </editor-fold>
 
-    ## BAM
+    # <editor-fold desc="BAM Commands">
     parser_bamcov = subparsers.add_parser("bamcov", help="BAM: Get mean read-depth for chromosomes from a BAM file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_pbamrc = subparsers.add_parser("pbamrc", help="BAM: Run bam-readcount in a parallel manner by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_splitbam = subparsers.add_parser("splitbam", help="BAM: Split a BAM files based on TAG value. BAM file must be sorted using the TAG.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_mapbp = subparsers.add_parser("mapbp", help="BAM: For a given reference coordinate get the corresponding base and position in the reads/segments mapping the reference position", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_bam2coords = subparsers.add_parser("bam2coords", help="BAM: Convert BAM/SAM file to alignment coords", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_ppileup = subparsers.add_parser("ppileup", help="BAM: Currently it is slower than just running mpileup on 1 CPU. Might be possible to optimize later. Run samtools mpileup in parallel when pileup is required for specific positions by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # </editor-fold>
+
 
     ## syri
     parser_runsyri = subparsers.add_parser("runsyri", help=hyellow("syri: Parser to align and run syri on two genomes"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -2591,6 +2619,8 @@ def main(cmd):
     parser_cntkmer.set_defaults(func=cntkmer)
     parser_cntkmer.add_argument("fasta", help="Input fasta file", type=argparse.FileType('r'))
     parser_cntkmer.add_argument("kmer", help="Kmer to find in fasta", type=str)
+    parser_cntkmer.add_argument("--loc", help="Output locations of kmer to BED format", default=False, action='store_true')
+    parser_cntkmer.add_argument("--locfin", help="BED file name", type=argparse.FileType('w'))
     parser_cntkmer.add_argument("--canonical", help="Count both the kmer and its reverse complement", default=False, action='store_true')
 
 
