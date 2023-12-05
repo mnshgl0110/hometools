@@ -468,24 +468,24 @@ def order(*args):
 # END
 
 
-def p_adjust(*args):
+def p_adjust(pvalues, method='bh'):
     """
     Takes list of values and do multiple hypothesis adjustment
     copied from
     https://rosettacode.org/wiki/P-value_correction#Python
 
     """
-    method = "bh"
-    pvalues = args[0]
-    if len(args) > 1:
-        methods = {"bh", "fdr", "by", "holm", "hommel", "bonferroni", "hochberg"}
-        metharg = args[1].lower()
-        if metharg in methods:
-            method = metharg
+    # method = "bh"
+    # pvalues = args[0]
+    # if len(args) > 1:
+    methods = {"bh", "fdr", "by", "holm", "hommel", "bonferroni", "hochberg"}
+        # metharg = args[1].lower()
+    if method not in methods:
+            logger.error(f"Incorrect method provided. Available methods: {methods}")
+
     lp = len(pvalues)
     n = lp
     qvalues = []
-
     if method == 'hochberg':#already all lower case
         o = order(pvalues, 'TRUE')
         cummin_input = []
@@ -499,7 +499,7 @@ def p_adjust(*args):
         o = order(pvalues, 'TRUE')
         cummin_input = []
         for index in range(n):
-            cummin_input.insert(index, (n/(n-index))* pvalues[o[index]])
+            cummin_input.insert(index, (n/(n-index)) * pvalues[o[index]])
         ro = order(o)
         cummin = cumminf(cummin_input)
         pmin = pminf(cummin)
@@ -1021,6 +1021,7 @@ def extractseq(args):
         else:
             for c, s in out.items():
                 print(">{}\n{}".format(c, s))
+    return
 # END
 
 
@@ -1319,8 +1320,11 @@ def getscaf(args):
 
 
 def seqsize(args):
+    from gzip import open as gzopen
     fin = args.fasta.name
-    out = [(chrom, len(seq)) for chrom, seq in readfasta(fin).items()]
+    f = gzopen(fin, 'r') if isgzip(fin) else open(fin, 'r')
+    # out = [(chrom, len(seq)) for chrom, seq in readfasta(fin).items()]
+    out = [(chrom, len(s)) for chrom, s in readfasta_iterator(f, isgzip(fin))]
     #TODO: Add output file
     for i in out:
         print(i[0], i[1], sep="\t")
@@ -1360,7 +1364,7 @@ def basrat(args):
 
 def getchr(args):
     fin = args.fasta.name
-    if args.chrs is None and args.F is not None: chroms = [c.strip() for c in open(args.F.name, 'r').readlines()]
+    if args.chrs is None and args.F is not None: chroms = [c.strip().split(' ')[0] for c in open(args.F.name, 'r').readlines()]
     elif args.chrs is not None and args.F is None: chroms = args.chrs
     else: raise Exception('InvalidValue: Incorrect value for chrs provided')
     out = args.o.name if args.o is not None else fin + ".filtered.fasta"
@@ -1370,10 +1374,6 @@ def getchr(args):
         if (c not in chroms) != args.v:
             fa.pop(c)
     writefasta(fa, out)
-    # with open(out, 'w') as fout:
-    #     for chrom, seq in .items():
-    #         if (chrom in chroms) != args.v:
-    #             fout.write(">" + chrom + "\n" + "\n".join([seq[i:i+60] for i in range(0, len(seq), 60)]) + '\n')
 # END
 
 
@@ -1511,8 +1511,8 @@ def vcfdp(args):
 
                         
 def gffsort(args):
-    print('Required format of GFF file:\n')
-    print('Chr\tMethod\tType\tStart\tEnd\tScore\tStrand\tPhase\tAttribute(ID=uniq_id;other_info)\n')
+    logger.info('Required format of GFF file:\n')
+    logger.info('Chr\tMethod\tType\tStart\tEnd\tScore\tStrand\tPhase\tAttribute(ID=uniq_id;other_info)\n')
     from collections import defaultdict
     header = True
     geneids = defaultdict(dict)
@@ -1546,7 +1546,7 @@ def gffsort(args):
             gffdata[chr][id] = seq
         
         for chr in sorted(list(geneids.keys())):
-            for gid in sorted(geneids[chr].keys(), key = lambda x: geneids[chr][x]):
+            for gid in sorted(geneids[chr].keys(), key=lambda x: geneids[chr][x]):
                 fout.write(gffdata[chr][gid])
 # END
 
@@ -2853,8 +2853,8 @@ def main(cmd):
     parser_exseq.set_defaults(func=extractseq)
     parser_exseq.add_argument("fasta", help="fasta file", type=argparse.FileType('r'))
     parser_exseq.add_argument("-c", "--chr", help="Chromosome ID", type=str)
-    parser_exseq.add_argument("-s", "--start", help="Start location (BED format, 0-base, end included)", type=int)
-    parser_exseq.add_argument("-e", "--end", help="End location (BED format, 0-base, end excluded)", type=int)
+    parser_exseq.add_argument("-s", "--start", help="Start location (BED format, 0-base, start included)", type=int)
+    parser_exseq.add_argument("-e", "--end", help="End location (BED format, 1-base, end excluded)", type=int)
     parser_exseq.add_argument("--fin", help="File containing locations to extract (BED format)", type=argparse.FileType('r'))
     parser_exseq.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default=None)
     parser_exseq.add_argument("-r", help="Reverse complement the sequence", default=False, action='store_true')

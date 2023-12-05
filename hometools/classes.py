@@ -291,8 +291,8 @@ class snvdata:
         self.ref = ls[2]
         self.rc = int(ls[3])
         self.basestring = ls[4]
-        self.bases, self.indels = [[], []] if self.rc == 0 else self._getbases(ls[4])
-        if len(self.bases) != self.rc:
+        self.bases, self.indels, self.gapindex = [[], []] if self.rc == 0 else self._getbases(ls[4])
+        if len(self.bases) != self.rc - len(self.gapindex):
             raise Exception('Number of identified bases if not equals to read count for {}:{}. ReadCount: {}, BaseCount: {}'.format(self.chr, self.pos, self.rc, len(self.bases)))
         self.BQ = [ord(c) - 33 for c in ls[5]]
         self.indelcount = len(self.indels)
@@ -306,6 +306,8 @@ class snvdata:
         skip = 0
         indel = False
         ind = ''
+        gapindex = deque()
+        index = 0
         for c in l:
             if skip > 0 and indel == False:
                 skip -= 1
@@ -324,13 +326,17 @@ class snvdata:
             if ind != '':
                 indellist.append(ind)
                 ind = ''
+                index += 1
             if c == '*':
                 # self.indelcount += 1
                 # indelcount += 1
                 bases.append(c)
                 continue
             if c == '$': continue
-            if c in ['<', '>']: sys.exit('spliced alignment found')
+            if c in ['<', '>']:
+                gapindex.append(index)
+                index += 1
+                continue
             if c == '^':
                 skip = 1
                 continue
@@ -340,7 +346,8 @@ class snvdata:
                 indelcount += 1
                 continue
             bases.append(c)
-        return [list(bases), list(indellist)]
+            index += 1
+        return list(bases), list(indellist), list(gapindex)
 
     def forwardcnt(self):
         try:
@@ -368,6 +375,7 @@ class snvdata:
         return [self.BQ[i] for i in range(len(self.bases)) if self.bases[i] == base]
 
     def getindelreads(self, reads):
+        # TODO: Check that it works properly with pileup from spliced reads
         from collections import deque
         self.indelreads = deque()
         reads = reads.split(",")
