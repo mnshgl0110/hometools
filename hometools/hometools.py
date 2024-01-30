@@ -1773,6 +1773,12 @@ def pbamrc(args):
 # END
 
 
+def bamrc2af(args):
+
+# END
+
+
+
 def run_ppileup(locs, out, bam, pars):
     from subprocess import Popen, PIPE
     with open(out, 'w') as fout:
