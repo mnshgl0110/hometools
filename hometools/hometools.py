@@ -1774,6 +1774,46 @@ def pbamrc(args):
 
 
 def bamrc2af(args):
+    """
+    Reads the output of pbamrc and a corresponding VCF file and returns the allele frequencies of the alt alleles.
+    Currently, working for only SNPs
+    """
+    from gzip import open as gzopen
+    logger = mylogger("bamrc2af")
+    rcfin = args.bamrc.name
+    vcffin = args.vcf.name
+    outfin = 'bamrc_af.txt' if args.out is None else args.out.name
+
+    ## Get alt SNP lists
+    rcfin = "C:\\Users\\ra98jam\\potato_hap_example\\dm_all_sample_snp_Otava_genotype.bamrc"
+    vcffin = "C:\\Users\\ra98jam\\potato_hap_example\\dm_all_sample_chr2.merged.vcf.gz"
+    outfin = "C:\\Users\\ra98jam\\potato_hap_example\\tmp.txt"
+
+    posdict = dict()
+    op = gzopen if isgzip(vcffin) else open
+    with op(vcffin, 'r') as vcf:
+        for line in vcf:
+            # break
+            if line[0] == 35: continue
+            line = line.decode()
+            line = line.strip().split()
+            if line[4].upper() not in 'ACGT' : continue
+            posdict[tuple(line[:2])] = line[3], line[4]
+
+    # Get AF from bam readcount
+    basedict = dict(zip('ACGT', range(4, 8)))
+    with open(rcfin, 'r') as rc, open(outfin, 'w') as out:
+        for line in rc:
+            line = line.strip().split()
+            try:
+                ref, alt = posdict[(line[0], line[1])]
+            except KeyError:
+                logger.warning(f'Position {line[0]}:{line[1]} not found in VCF. Skipping it.')
+            refi = basedict[ref]
+            alti = basedict[alt]
+            out.write(f'{line[0]}\t{line[1]}\t{ref}\t{alt}\t{round(int(line[refi])/int(line[3]) , 2)}\t{round(int(line[alti])/int(line[3]), 2)}\n')
+
+
 
 # END
 
@@ -2575,17 +2615,23 @@ def main(cmd):
     # <editor-fold desc="BAM Commands">
     parser_bamcov = subparsers.add_parser("bamcov", help="BAM: Get mean read-depth for chromosomes from a BAM file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_pbamrc = subparsers.add_parser("pbamrc", help="BAM: Run bam-readcount in a parallel manner by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_bamrc2af = subparsers.add_parser("bamrc2af", help="BAM: Reads the output of pbamrc and a corresponding VCF file and saves the allele frequencies of the ref/alt alleles.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_splitbam = subparsers.add_parser("splitbam", help="BAM: Split a BAM files based on TAG value. BAM file must be sorted using the TAG.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_mapbp = subparsers.add_parser("mapbp", help="BAM: For a given reference coordinate get the corresponding base and position in the reads/segments mapping the reference position", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_bam2coords = subparsers.add_parser("bam2coords", help="BAM: Convert BAM/SAM file to alignment coords", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_ppileup = subparsers.add_parser("ppileup", help="BAM: Currently it is slower than just running mpileup on 1 CPU. Might be possible to optimize later. Run samtools mpileup in parallel when pileup is required for specific positions by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # </editor-fold>
 
+    # <editor-fold desc="syri">
+    parser_runsyri = subparsers.add_parser("runsyri", help=hyellow("syri: Parser to align and run syri on two genomes"),
+                                           formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_syriidx = subparsers.add_parser("syriidx", help=hyellow(
+        "syri: Generates index for syri.out. Filters non-SR annotations, then bgzip, then tabix index"),
+                                           formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_syri2bed = subparsers.add_parser("syri2bed", help=hyellow("syri: Converts syri output to bedpe format"),
+                                            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # </editor-fold>
 
-    ## syri
-    parser_runsyri = subparsers.add_parser("runsyri", help=hyellow("syri: Parser to align and run syri on two genomes"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_syriidx = subparsers.add_parser("syriidx", help=hyellow("syri: Generates index for syri.out. Filters non-SR annotations, then bgzip, then tabix index"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_syri2bed = subparsers.add_parser("syri2bed", help=hyellow("syri: Converts syri output to bedpe format"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     ## Plotting
     parser_plthist = subparsers.add_parser("plthist", help="Plot: Takes frequency output (like from uniq -c) and generates a histogram plot", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
