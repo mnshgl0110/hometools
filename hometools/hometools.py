@@ -1776,7 +1776,7 @@ def pbamrc(args):
 def bamrc2af(args):
     """
     Reads the output of pbamrc and a corresponding VCF file and returns the allele frequencies of the alt alleles.
-    Currently, working for only SNPs
+    Currently, working for SNPs only
     """
     from gzip import open as gzopen
     logger = mylogger("bamrc2af")
@@ -1784,11 +1784,7 @@ def bamrc2af(args):
     vcffin = args.vcf.name
     outfin = 'bamrc_af.txt' if args.out is None else args.out.name
 
-    ## Get alt SNP lists
-    rcfin = "C:\\Users\\ra98jam\\potato_hap_example\\dm_all_sample_snp_Otava_genotype.bamrc"
-    vcffin = "C:\\Users\\ra98jam\\potato_hap_example\\dm_all_sample_chr2.merged.vcf.gz"
-    outfin = "C:\\Users\\ra98jam\\potato_hap_example\\tmp.txt"
-
+    logger.info('Reading VCF')
     posdict = dict()
     op = gzopen if isgzip(vcffin) else open
     with op(vcffin, 'r') as vcf:
@@ -1800,6 +1796,7 @@ def bamrc2af(args):
             if line[4].upper() not in 'ACGT' : continue
             posdict[tuple(line[:2])] = line[3], line[4]
 
+    logger.info('Reading bamrc')
     # Get AF from bam readcount
     basedict = dict(zip('ACGT', range(4, 8)))
     with open(rcfin, 'r') as rc, open(outfin, 'w') as out:
@@ -1812,11 +1809,8 @@ def bamrc2af(args):
             refi = basedict[ref]
             alti = basedict[alt]
             out.write(f'{line[0]}\t{line[1]}\t{ref}\t{alt}\t{round(int(line[refi])/int(line[3]) , 2)}\t{round(int(line[alti])/int(line[3]), 2)}\n')
-
-
-
+    logger.info('Finishe')
 # END
-
 
 
 def run_ppileup(locs, out, bam, pars):
@@ -2622,7 +2616,7 @@ def main(cmd):
     parser_ppileup = subparsers.add_parser("ppileup", help="BAM: Currently it is slower than just running mpileup on 1 CPU. Might be possible to optimize later. Run samtools mpileup in parallel when pileup is required for specific positions by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # </editor-fold>
 
-    # <editor-fold desc="syri">
+    # <editor-fold desc="syri CLI">
     parser_runsyri = subparsers.add_parser("runsyri", help=hyellow("syri: Parser to align and run syri on two genomes"),
                                            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_syriidx = subparsers.add_parser("syriidx", help=hyellow(
@@ -2632,11 +2626,12 @@ def main(cmd):
                                             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # </editor-fold>
 
-
-    ## Plotting
+    # <editor-fold desc="Plotting">
     parser_plthist = subparsers.add_parser("plthist", help="Plot: Takes frequency output (like from uniq -c) and generates a histogram plot", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_plotal = subparsers.add_parser("plotal", help="Plot: Visualise pairwise-whole genome alignments between multiple genomes", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_plotbar = subparsers.add_parser("pltbar", help="Plot: Generate barplot. Input: a two column file with first column as features and second column as values", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # </editor-fold>
+
 
     ## Assembly graphs
     parser_asmreads = subparsers.add_parser("asmreads", help=hyellow("GFA: For a given genomic region, get reads that constitute the corresponding assembly graph"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -2658,6 +2653,12 @@ def main(cmd):
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
+
+    # bamrc2af
+    parser_bamrc2af.set_defaults(func=bamrc2af)
+    parser_bamrc2af.add_argument("bamrc", help="BAM readcount file generated using bamrc", type=argparse.FileType('r'))
+    parser_bamrc2af.add_argument("vcf", help="VCF file", type=argparse.FileType('r'))
+    parser_bamrc2af.add_argument("out", help="Output file", type=argparse.FileType('w'))
 
     # xls2csv
     parser_xls2tsv.set_defaults(func=xls2csv)
