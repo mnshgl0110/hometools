@@ -1,79 +1,78 @@
-Metadata-Version: 1.0
+Metadata-Version: 2.1
 Name: hometools
 Version: 1.3.1
 Summary: Collections of command-line functions to perform common pre-processing and analysis functions
-Home-page: UNKNOWN
 Author: Manish Goel
 Author-email: goel@mpipz.mpg.de
 License: MIT License
-Description: usage: Collections of command-line functions to perform common pre-processing and analysis functions.
-               [-h]
-               {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,shannon,fachrid,faline,bamcov,pbamrc,splitbam,mapbp,bam2coords,ppileup,runsyri,syriidx,plthist,plotal,pltbar,asmreads,gfatofa,gfftrans,gffsort,vcfdp,getcol,smprow}
-               ...
-        
-        positional arguments:
-          {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,shannon,fachrid,faline,bamcov,pbamrc,splitbam,mapbp,bam2coords,ppileup,runsyri,syriidx,plthist,plotal,pltbar,asmreads,gfatofa,gfftrans,gffsort,vcfdp,getcol,smprow}
-            getchr              FASTA: Get specific chromosomes from the fasta
-                                file
-            sampfa              FASTA: Sample random sequences from a fasta
-                                file
-            exseq               FASTA: extract sequence from fasta
-            getscaf             FASTA: generate scaffolds from a given
-                                genome
-            seqsize             FASTA: get size of dna sequences in a fasta
-                                file
-            filsize             FASTA: filter out smaller molecules
-            subnuc              FASTA: Change character (in all sequences) in the
-                                fasta file
-            basrat              FASTA: Calculate the ratio of every base in the
-                                genome
-            genome_ranges       FASTA: Get a list of genomic ranges of a given
-                                size
-            get_homopoly        FASTA: Find homopolymeric regions in a given
-                                fasta file
-            asstat              FASTA: Get N50 values for the given list of
-                                chromosomes
-            shannon             FASTA: Get Shanon entropy across the length of
-                                the chromosomes using sliding windows
-            fachrid             FASTA: Change chromosome IDs
-            faline              FASTA: Convert fasta file from single line to
-                                multi line or vice-versa
-            bamcov              BAM: Get mean read-depth for chromosomes from a BAM
-                                file
-            pbamrc              BAM: Run bam-readcount in a parallel manner by
-                                dividing the input bed file.
-            splitbam            BAM: Split a BAM files based on TAG value. BAM file
-                                must be sorted using the TAG.
-            mapbp               BAM: For a given reference coordinate get the
-                                corresponding base and position in the reads/segments
-                                mapping the reference position
-            bam2coords          BAM: Convert BAM/SAM file to alignment coords
-            ppileup             BAM: Currently it is slower than just running mpileup
-                                on 1 CPU. Might be possible to optimize later. Run
-                                samtools mpileup in parallel when pileup is required
-                                for specific positions by dividing the input bed file.
-            runsyri             syri: Parser to align and run syri on two
-                                genomes
-            syriidx             syri: Generates index for syri.out. Filters non-
-                                SR annotations, then bgzip, then tabix index
-            plthist             Plot: Takes frequency output (like from uniq -c) and
-                                generates a histogram plot
-            plotal              Plot: Visualise pairwise-whole genome alignments
-                                between multiple genomes
-            pltbar              Plot: Generate barplot. Input: a two column file with
-                                first column as features and second column as values
-            asmreads            GFA: For a given genomic region, get reads that
-                                constitute the corresponding assembly graph
-            gfatofa             GFA: Convert a gfa file to a fasta file
-            gfftrans            GFF: Get transcriptome (gene sequence) for all genes
-                                in a gff file. WARNING: THIS FUNCTION MIGHT HAVE BUGS.
-            gffsort             GFF: Sort a GFF file based on the gene start positions
-            vcfdp               VCF: Get DP and DP4 values from a VCF file.
-            getcol              Table:Select columns from a TSV or CSV file using
-                                column names
-            smprow              Table:Select random rows from a text file
-        
-        optional arguments:
-          -h, --help            show this help message and exit
-        
-Platform: UNKNOWN
+License-File: LICENSE
+
+usage: Collections of command-line functions to perform common pre-processing and analysis functions.
+       [-h]
+       {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,shannon,fachrid,faline,bamcov,pbamrc,splitbam,mapbp,bam2coords,ppileup,runsyri,syriidx,plthist,plotal,pltbar,asmreads,gfatofa,gfftrans,gffsort,vcfdp,getcol,smprow}
+       ...
+
+positional arguments:
+  {getchr,sampfa,exseq,getscaf,seqsize,filsize,subnuc,basrat,genome_ranges,get_homopoly,asstat,shannon,fachrid,faline,bamcov,pbamrc,splitbam,mapbp,bam2coords,ppileup,runsyri,syriidx,plthist,plotal,pltbar,asmreads,gfatofa,gfftrans,gffsort,vcfdp,getcol,smprow}
+    getchr              FASTA: Get specific chromosomes from the fasta
+                        file
+    sampfa              FASTA: Sample random sequences from a fasta
+                        file
+    exseq               FASTA: extract sequence from fasta
+    getscaf             FASTA: generate scaffolds from a given
+                        genome
+    seqsize             FASTA: get size of dna sequences in a fasta
+                        file
+    filsize             FASTA: filter out smaller molecules
+    subnuc              FASTA: Change character (in all sequences) in the
+                        fasta file
+    basrat              FASTA: Calculate the ratio of every base in the
+                        genome
+    genome_ranges       FASTA: Get a list of genomic ranges of a given
+                        size
+    get_homopoly        FASTA: Find homopolymeric regions in a given
+                        fasta file
+    asstat              FASTA: Get N50 values for the given list of
+                        chromosomes
+    shannon             FASTA: Get Shanon entropy across the length of
+                        the chromosomes using sliding windows
+    fachrid             FASTA: Change chromosome IDs
+    faline              FASTA: Convert fasta file from single line to
+                        multi line or vice-versa
+    bamcov              BAM: Get mean read-depth for chromosomes from a BAM
+                        file
+    pbamrc              BAM: Run bam-readcount in a parallel manner by
+                        dividing the input bed file.
+    splitbam            BAM: Split a BAM files based on TAG value. BAM file
+                        must be sorted using the TAG.
+    mapbp               BAM: For a given reference coordinate get the
+                        corresponding base and position in the reads/segments
+                        mapping the reference position
+    bam2coords          BAM: Convert BAM/SAM file to alignment coords
+    ppileup             BAM: Currently it is slower than just running mpileup
+                        on 1 CPU. Might be possible to optimize later. Run
+                        samtools mpileup in parallel when pileup is required
+                        for specific positions by dividing the input bed file.
+    runsyri             syri: Parser to align and run syri on two
+                        genomes
+    syriidx             syri: Generates index for syri.out. Filters non-
+                        SR annotations, then bgzip, then tabix index
+    plthist             Plot: Takes frequency output (like from uniq -c) and
+                        generates a histogram plot
+    plotal              Plot: Visualise pairwise-whole genome alignments
+                        between multiple genomes
+    pltbar              Plot: Generate barplot. Input: a two column file with
+                        first column as features and second column as values
+    asmreads            GFA: For a given genomic region, get reads that
+                        constitute the corresponding assembly graph
+    gfatofa             GFA: Convert a gfa file to a fasta file
+    gfftrans            GFF: Get transcriptome (gene sequence) for all genes
+                        in a gff file. WARNING: THIS FUNCTION MIGHT HAVE BUGS.
+    gffsort             GFF: Sort a GFF file based on the gene start positions
+    vcfdp               VCF: Get DP and DP4 values from a VCF file.
+    getcol              Table:Select columns from a TSV or CSV file using
+                        column names
+    smprow              Table:Select random rows from a text file
+
+optional arguments:
+  -h, --help            show this help message and exit
