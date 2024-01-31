@@ -1773,6 +1773,7 @@ def pbamrc(args):
 # END
 
 
+<<<<<<< HEAD
 def bamrc2af(args):
     """
     Reads the output of pbamrc and a corresponding VCF file and returns the allele frequencies of the alt alleles.
@@ -1813,6 +1814,8 @@ def bamrc2af(args):
 # END
 
 
+=======
+>>>>>>> origin/master
 def run_ppileup(locs, out, bam, pars):
     from subprocess import Popen, PIPE
     with open(out, 'w') as fout:
@@ -2609,13 +2612,17 @@ def main(cmd):
     # <editor-fold desc="BAM Commands">
     parser_bamcov = subparsers.add_parser("bamcov", help="BAM: Get mean read-depth for chromosomes from a BAM file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_pbamrc = subparsers.add_parser("pbamrc", help="BAM: Run bam-readcount in a parallel manner by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+<<<<<<< HEAD
     parser_bamrc2af = subparsers.add_parser("bamrc2af", help="BAM: Reads the output of pbamrc and a corresponding VCF file and saves the allele frequencies of the ref/alt alleles.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+=======
+>>>>>>> origin/master
     parser_splitbam = subparsers.add_parser("splitbam", help="BAM: Split a BAM files based on TAG value. BAM file must be sorted using the TAG.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_mapbp = subparsers.add_parser("mapbp", help="BAM: For a given reference coordinate get the corresponding base and position in the reads/segments mapping the reference position", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_bam2coords = subparsers.add_parser("bam2coords", help="BAM: Convert BAM/SAM file to alignment coords", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_ppileup = subparsers.add_parser("ppileup", help="BAM: Currently it is slower than just running mpileup on 1 CPU. Might be possible to optimize later. Run samtools mpileup in parallel when pileup is required for specific positions by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # </editor-fold>
 
+<<<<<<< HEAD
     # <editor-fold desc="syri CLI">
     parser_runsyri = subparsers.add_parser("runsyri", help=hyellow("syri: Parser to align and run syri on two genomes"),
                                            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -2632,6 +2639,18 @@ def main(cmd):
     parser_plotbar = subparsers.add_parser("pltbar", help="Plot: Generate barplot. Input: a two column file with first column as features and second column as values", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # </editor-fold>
 
+=======
+
+    ## syri
+    parser_runsyri = subparsers.add_parser("runsyri", help=hyellow("syri: Parser to align and run syri on two genomes"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_syriidx = subparsers.add_parser("syriidx", help=hyellow("syri: Generates index for syri.out. Filters non-SR annotations, then bgzip, then tabix index"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_syri2bed = subparsers.add_parser("syri2bed", help=hyellow("syri: Converts syri output to bedpe format"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    ## Plotting
+    parser_plthist = subparsers.add_parser("plthist", help="Plot: Takes frequency output (like from uniq -c) and generates a histogram plot", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_plotal = subparsers.add_parser("plotal", help="Plot: Visualise pairwise-whole genome alignments between multiple genomes", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_plotbar = subparsers.add_parser("pltbar", help="Plot: Generate barplot. Input: a two column file with first column as features and second column as values", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+>>>>>>> origin/master
 
     ## Assembly graphs
     parser_asmreads = subparsers.add_parser("asmreads", help=hyellow("GFA: For a given genomic region, get reads that constitute the corresponding assembly graph"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -2654,11 +2673,14 @@ def main(cmd):
         parser.print_help()
         sys.exit()
 
+<<<<<<< HEAD
     # bamrc2af
     parser_xls2tsv.set_defaults(func=xls2csv)
     parser_xls2tsv.add_argument("xls", help="Input excel file", type=argparse.FileType('r'))
 
 
+=======
+>>>>>>> origin/master
     # xls2csv
     parser_xls2tsv.set_defaults(func=xls2csv)
     parser_xls2tsv.add_argument("xls", help="Input excel file", type=argparse.FileType('r'))
