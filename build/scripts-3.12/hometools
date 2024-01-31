@@ -1,6 +1,0 @@
-#!C:\Users\ra98jam\anaconda\envs\mgpy12\python.exe
-
-from hometools.hometools import main
-import sys
-if __name__ == '__main__':
-    main(sys.argv[1:])
