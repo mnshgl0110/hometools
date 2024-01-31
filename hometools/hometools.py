@@ -1802,7 +1802,7 @@ def bamrc2af(args):
     with open(rcfin, 'r') as rc, open(outfin, 'w') as out:
         for line in rc:
             line = line.strip().split()
-            if line[3] == 0: continue
+            if line[3] == '0': continue
             try:
                 ref, alt = posdict[(line[0], line[1])]
             except KeyError:
