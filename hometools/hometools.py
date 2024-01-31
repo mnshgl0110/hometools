@@ -1807,6 +1807,7 @@ def bamrc2af(args):
                 ref, alt = posdict[(line[0], line[1])]
             except KeyError:
                 logger.warning(f'Position {line[0]}:{line[1]} not found in VCF. Skipping it.')
+                continue
             refi = basedict[ref]
             alti = basedict[alt]
             out.write(f'{line[0]}\t{line[1]}\t{ref}\t{alt}\t{round(int(line[refi])/int(line[3]) , 2)}\t{round(int(line[alti])/int(line[3]), 2)}\n')
