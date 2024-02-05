@@ -1727,7 +1727,7 @@ def pbamrc(args):
     for i in range(split_N):
         tmp_df[i].to_csv(str(pre)+'_'+str(i)+".bed", sep='\t', header=False, index=False)
 
-    command = "bam-readcount" if args.bamrcpath is None else args.bamrcpath
+    command = "bam-readcount" if args.bamrcpath is None else args.bamrcpath.name
     if args.q > 0: command += " -q {}".format(args.q)
     if args.b > 0: command += " -b {}".format(args.b)
     if args.d != 10000000: command += " -d {}".format(args.d)
