@@ -2825,6 +2825,7 @@ def main(cmd):
     parser_pbamrc.add_argument("-n", help="Number of CPU cores to use", type=int, default=1)
     parser_pbamrc.add_argument("-S", help="Run jobs in sequentially (each line from bed starts a new job). By default, jobs are run in batches (by dividing the BED file)", action='store_true', default=False)
     parser_pbamrc.add_argument("o", help="Output file name", type=argparse.FileType('w'))
+    parser_pbamrc.add_argument("--bamrcpath", help="Location of bam-readcount executable", type=argparse.FileType('r'))
 
 
     parser_bamcov.set_defaults(func=bamcov)
