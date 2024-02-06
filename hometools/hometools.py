@@ -1805,7 +1805,7 @@ def bamrc2af(args):
         for line in rc:
             line = line.strip().split()
             # if line[3] == '0': continue
-            if int(line[3]) < min_rc: continue
+            if int(line[3]) < minrc: continue
             try:
                 ref, alt = posdict[(line[0], line[1])]
             except KeyError:
