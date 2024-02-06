@@ -1699,6 +1699,7 @@ def run_bam_readcount(tmp_com, outfile):
     o = p.communicate()
     # if o[1] != b'Minimum mapping quality is set to 40':
     #     sys.exit("Error in running bam-readcount:\n{}".format(o[1].decode()))
+    return
 # END
 
 
@@ -1783,6 +1784,7 @@ def bamrc2af(args):
     rcfin = args.bamrc.name
     vcffin = args.vcf.name
     outfin = 'bamrc_af.txt' if args.out is None else args.out.name
+    minrc = args.min_rc
 
     logger.info('Reading VCF')
     posdict = dict()
@@ -1802,7 +1804,8 @@ def bamrc2af(args):
     with open(rcfin, 'r') as rc, open(outfin, 'w') as out:
         for line in rc:
             line = line.strip().split()
-            if line[3] == '0': continue
+            # if line[3] == '0': continue
+            if int(line[3]) < min_rc: continue
             try:
                 ref, alt = posdict[(line[0], line[1])]
             except KeyError:
@@ -1811,7 +1814,7 @@ def bamrc2af(args):
             refi = basedict[ref]
             alti = basedict[alt]
             out.write(f'{line[0]}\t{line[1]}\t{ref}\t{alt}\t{round(int(line[refi])/int(line[3]) , 2)}\t{round(int(line[alti])/int(line[3]), 2)}\n')
-    logger.info('Finishe')
+    logger.info('Finished')
 # END
 
 
@@ -2661,6 +2664,7 @@ def main(cmd):
     parser_bamrc2af.add_argument("bamrc", help="BAM readcount file generated using bamrc", type=argparse.FileType('r'))
     parser_bamrc2af.add_argument("vcf", help="VCF file", type=argparse.FileType('r'))
     parser_bamrc2af.add_argument("out", help="Output file", type=argparse.FileType('w'))
+    parser_bamrc2af.add_argument("--min_rc", help="Minimum required read count. Position with lower number of reads would be filtered out", type=int, default=1)
 
     # xls2csv
     parser_xls2tsv.set_defaults(func=xls2csv)
