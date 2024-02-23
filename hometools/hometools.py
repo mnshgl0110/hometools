@@ -2151,7 +2151,7 @@ def reg_str_to_list(regstr):
 
 def mapbp(args):
     """
-        Outputs mapping positions for the given reference genome coordinate
+    Outputs mapping positions for the given reference genome coordinate
     """
     import pysam
     from collections import defaultdict, deque

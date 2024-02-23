@@ -534,3 +534,16 @@ def inlineplotsr(ax, args):
     # logger.info('Finished')
 
     return ax
+
+
+def loghist(x, ax, bins=10):
+    """
+    Generate the plot on a logarithmic histogram
+    """
+    import numpy as np
+    hist, bins = np.histogram(x, bins=bins)
+    logbins = np.logspace(np.log10(bins[0]), np.log10(bins[-1]), len(bins))
+    ax.hist(x, bins=logbins)
+    ax.set_xscale('log')
+    return ax
+# END
