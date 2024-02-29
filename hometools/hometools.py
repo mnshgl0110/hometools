@@ -2233,18 +2233,20 @@ def runsryi(args):
     from subprocess import Popen
     ref = args.ref.name
     qry = args.qry.name
+    refi = args.rid.name if args.rid is not None else None
     N = args.n
     prefix = args.p
     altype = args.alignment
 
     alfile = f'{prefix}.{altype}'
+    r = refi if refi is not None else ref
     # align the genomes
     if altype == 'paf':
-        command = f'minimap2 -cx asm5 -t {N} --eqx -o {alfile} {ref} {qry}'
+        command = f'minimap2 -cx asm5 -t {N} --eqx -o {alfile} {r} {qry}'
         proc = Popen(command.split())
         proc.wait()
     else:
-        command = f'minimap2 -ax asm5 -t {N} --eqx {ref} {qry} | samtools sort -@ {N} -O {altype.upper()} -o {alfile} - '
+        command = f'minimap2 -ax asm5 -t {N} --eqx {r} {qry} | samtools sort -@ {N} -O {altype.upper()} -o {alfile} - '
         # Use shell=True so make the pipe work
         proc = Popen(command, shell=True)
         proc.wait()
@@ -2587,6 +2589,39 @@ def xls2csv(args):
 # END
 
 
+def gz2bgz(args):
+    import numpy as np
+    from gzip import open as gzopen
+    from Bio import bgzf
+    import os
+    from time import time
+    logger = mylogger('gz2bgz')
+    fin = args.fin.name
+    out = args.out.name if args.out is not None else None
+    try:
+        assert isgzip(fin)
+    except AssertionError:
+        logger.error('Input file is not gzip compressed. Exiting')
+        sys.exit()
+    if out is None:
+        usetmp = True
+        fout = f'{str(time()).replace(".", "")}{np.random.randint(1000000000)}.gz'
+        logger.info(f'Saving to temporary file {fout}')
+    else:
+        usetmp = False
+        fout = out
+        logger.info(f'Saving to output file {fout}')
+    with gzopen(fin, 'rb') as f, bgzf.open(fout, 'wb') as fo:
+        for line in f:
+            fo.write(line)
+    if usetmp:
+        logger.info(f'Ranaming temporary file {fout} to input file {fin}')
+        os.rename(fout, fin)
+    logger.info('Finished')
+    return
+# END
+
+
 def main(cmd):
     parser = argparse.ArgumentParser("Collections of command-line functions to perform common pre-processing and analysis functions.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     subparsers = parser.add_subparsers()
@@ -2637,27 +2672,42 @@ def main(cmd):
     parser_plotbar = subparsers.add_parser("pltbar", help="Plot: Generate barplot. Input: a two column file with first column as features and second column as values", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # </editor-fold>
 
-
-    ## Assembly graphs
+    # <editor-fold desc='Assembly graphs'>
     parser_asmreads = subparsers.add_parser("asmreads", help=hyellow("GFA: For a given genomic region, get reads that constitute the corresponding assembly graph"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_gfatofa = subparsers.add_parser("gfatofa", help=hyellow("GFA: Convert a gfa file to a fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # </editor-fold>
 
-    ## GFF
+    # <editor-fold desc='GFF'>
     parser_gfftrans = subparsers.add_parser("gfftrans", help="GFF: Get transcriptome (gene sequence) for all genes in a gff file. WARNING: THIS FUNCTION MIGHT HAVE BUGS.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_gffsort = subparsers.add_parser("gffsort", help="GFF: Sort a GFF file based on the gene start positions", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # </editor-fold>
 
-    ## VCF
+    # <editor-fold desc='VCF'>
     parser_vcfdp = subparsers.add_parser("vcfdp", help=hyellow("VCF: Get DP and DP4 values from a VCF file."), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # </editor-fold>
 
-    ## Tables
+    # <editor-fold desc='Tables'>
     parser_getcol = subparsers.add_parser("getcol", help="Table:Select columns from a TSV or CSV file using column names", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # TODO: Add functionality for sampling rows
     parser_samplerow = subparsers.add_parser("smprow", help="Table:Select random rows from a text file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_xls2tsv = subparsers.add_parser("xls2csv", help="Table:Convert excel tables to .tsv/.csv", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # </editor-fold>
+
+    # <editor-fold desc='Misc'>
+    parser_gz2bgz = subparsers.add_parser("gz2bgz",
+                                          help="Misc:converts a gz to bgzip",
+                                          formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    # </editor-fold>
 
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
+
+    # gz2bgz
+    parser_gz2bgz.set_defaults(func=gz2bgz)
+    parser_gz2bgz.add_argument('fin', help="Input gzip file", type=argparse.FileType('r'))
+    parser_gz2bgz.add_argument('--out', help='Output file name', type=argparse.FileType('w'))
 
     # bamrc2af
     parser_bamrc2af.set_defaults(func=bamrc2af)
@@ -2723,6 +2773,7 @@ def main(cmd):
     parser_runsyri.set_defaults(func=runsryi)
     parser_runsyri.add_argument("ref", help='Reference genome', type=argparse.FileType('r'))
     parser_runsyri.add_argument("qry", help='Query genome', type=argparse.FileType('r'))
+    parser_runsyri.add_argument("--rid", help='Reference index generated using minima2', type=argparse.FileType('r'))
     parser_runsyri.add_argument("-n", help='Number of cores to use', type=int, default=1)
     parser_runsyri.add_argument("-p", help='prefix', type=str, default='out')
     parser_runsyri.add_argument("-alignment", help='Output alignment type', choices=['sam', 'bam', 'paf'], default='paf', type=str)
@@ -2945,13 +2996,10 @@ def main(cmd):
 
     
     args = parser.parse_args()
-
+    # print(args)
     from itertools import cycle
     from sys import getsizeof, stderr
     from itertools import chain
     from collections import deque
-
-
-    # print(args)
     args.func(args)
 
