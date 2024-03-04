@@ -2149,7 +2149,7 @@ def reg_str_to_list(regstr):
 # END
 
 
-def mapbp(sfin, mapfin, d, pos):
+def mapbp(sfin, mapfin, d, posstr):
     """
     Outputs mapping positions for the given reference genome coordinate
     """
