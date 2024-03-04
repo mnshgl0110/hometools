@@ -1,2 +1,7 @@
+.gitignore
+.github
+
 build/*
 hometools.egg-info/*
+
+.idea/
