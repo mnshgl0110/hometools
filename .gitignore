@@ -1,0 +1,9 @@
+.gitignore
+.github
+hometools/__pycache__/
+build/*
+hometools.egg-info/*
+
+.idea/
+
+*pyc

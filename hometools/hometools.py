@@ -1699,6 +1699,7 @@ def run_bam_readcount(tmp_com, outfile):
     o = p.communicate()
     # if o[1] != b'Minimum mapping quality is set to 40':
     #     sys.exit("Error in running bam-readcount:\n{}".format(o[1].decode()))
+    return
 # END
 
 
@@ -1727,7 +1728,7 @@ def pbamrc(args):
     for i in range(split_N):
         tmp_df[i].to_csv(str(pre)+'_'+str(i)+".bed", sep='\t', header=False, index=False)
 
-    command = "bam-readcount"
+    command = "bam-readcount" if args.bamrcpath is None else args.bamrcpath.name
     if args.q > 0: command += " -q {}".format(args.q)
     if args.b > 0: command += " -b {}".format(args.b)
     if args.d != 10000000: command += " -d {}".format(args.d)
@@ -1770,6 +1771,50 @@ def pbamrc(args):
     for i in range(split_N):
         os.remove(str(pre)+'_'+str(i)+".bed")
         os.remove(str(pre)+'_'+str(i)+".rc")
+# END
+
+
+def bamrc2af(args):
+    """
+    Reads the output of pbamrc and a corresponding VCF file and returns the allele frequencies of the alt alleles.
+    Currently, working for SNPs only
+    """
+    from gzip import open as gzopen
+    logger = mylogger("bamrc2af")
+    rcfin = args.bamrc.name
+    vcffin = args.vcf.name
+    outfin = 'bamrc_af.txt' if args.out is None else args.out.name
+    minrc = args.min_rc
+
+    logger.info('Reading VCF')
+    posdict = dict()
+    op = gzopen if isgzip(vcffin) else open
+    with op(vcffin, 'r') as vcf:
+        for line in vcf:
+            # break
+            if line[0] == 35: continue
+            line = line.decode()
+            line = line.strip().split()
+            if line[4].upper() not in 'ACGT' : continue
+            posdict[tuple(line[:2])] = line[3], line[4]
+
+    logger.info('Reading bamrc')
+    # Get AF from bam readcount
+    basedict = dict(zip('ACGT', range(4, 8)))
+    with open(rcfin, 'r') as rc, open(outfin, 'w') as out:
+        for line in rc:
+            line = line.strip().split()
+            # if line[3] == '0': continue
+            if int(line[3]) < minrc: continue
+            try:
+                ref, alt = posdict[(line[0], line[1])]
+            except KeyError:
+                logger.warning(f'Position {line[0]}:{line[1]} not found in VCF. Skipping it.')
+                continue
+            refi = basedict[ref]
+            alti = basedict[alt]
+            out.write(f'{line[0]}\t{line[1]}\t{ref}\t{alt}\t{round(int(line[refi])/int(line[3]) , 2)}\t{round(int(line[alti])/int(line[3]), 2)}\n')
+    logger.info('Finished')
 # END
 
 
@@ -2104,9 +2149,9 @@ def reg_str_to_list(regstr):
 # END
 
 
-def mapbp(args):
+def mapbp(sfin, mapfin, d, pos):
     """
-        Outputs mapping positions for the given reference genome coordinate
+    Outputs mapping positions for the given reference genome coordinate
     """
     import pysam
     from collections import defaultdict, deque
@@ -2117,13 +2162,9 @@ def mapbp(args):
         :param: pos = reference genome coordinate in (chrom, start, end) format 
         """
         return [b.split('\t') for b in sout.fetch(*pos)]
-    # END 
+    # END
 
-    sfin = args.anno.name if args.anno is not None else None           # input syri.out file
-    mapfin = args.map.name
-    d = args.d
-    pos = reg_str_to_list(args.pos)
-
+    outd = deque()
     # if syri output is provided, select alignments selected by syri
     if sfin is not None:
         #TODO: Validate that this works correctly when syri output file is also provided
@@ -2159,11 +2200,21 @@ def mapbp(args):
         out = f"{al.query_name}:{p}-{p}"
         if d:
             out = out + '\t+' if al.is_forward else out + '\t-'
-        print(out)
+        outd.append(out)
+    return outd
+# END
+
+
+def mapbp_cli(args):
+    sfin = args.anno.name if args.anno is not None else None           # input syri.out file
+    mapfin = args.map.name
+    d = args.d
+    pos = reg_str_to_list(args.pos)
+    outd = mapbp(sfin, mapfin, d, pos)
+    print('\n'.join(outd))
     logger.info('Finished')
     return
 # END
-
 
 def fachrid(args):
     fa = args.fa.name
@@ -2188,18 +2239,20 @@ def runsryi(args):
     from subprocess import Popen
     ref = args.ref.name
     qry = args.qry.name
+    refi = args.rid.name if args.rid is not None else None
     N = args.n
     prefix = args.p
     altype = args.alignment
 
     alfile = f'{prefix}.{altype}'
+    r = refi if refi is not None else ref
     # align the genomes
     if altype == 'paf':
-        command = f'minimap2 -cx asm5 -t {N} --eqx -o {alfile} {ref} {qry}'
+        command = f'minimap2 -cx asm5 -t {N} --eqx -o {alfile} {r} {qry}'
         proc = Popen(command.split())
         proc.wait()
     else:
-        command = f'minimap2 -ax asm5 -t {N} --eqx {ref} {qry} | samtools sort -@ {N} -O {altype.upper()} -o {alfile} - '
+        command = f'minimap2 -ax asm5 -t {N} --eqx {r} {qry} | samtools sort -@ {N} -O {altype.upper()} -o {alfile} - '
         # Use shell=True so make the pipe work
         proc = Popen(command, shell=True)
         proc.wait()
@@ -2542,6 +2595,39 @@ def xls2csv(args):
 # END
 
 
+def gz2bgz(args):
+    import numpy as np
+    from gzip import open as gzopen
+    from Bio import bgzf
+    import os
+    from time import time
+    logger = mylogger('gz2bgz')
+    fin = args.fin.name
+    out = args.out.name if args.out is not None else None
+    try:
+        assert isgzip(fin)
+    except AssertionError:
+        logger.error('Input file is not gzip compressed. Exiting')
+        sys.exit()
+    if out is None:
+        usetmp = True
+        fout = f'{str(time()).replace(".", "")}{np.random.randint(1000000000)}.gz'
+        logger.info(f'Saving to temporary file {fout}')
+    else:
+        usetmp = False
+        fout = out
+        logger.info(f'Saving to output file {fout}')
+    with gzopen(fin, 'rb') as f, bgzf.open(fout, 'wb') as fo:
+        for line in f:
+            fo.write(line)
+    if usetmp:
+        logger.info(f'Ranaming temporary file {fout} to input file {fin}')
+        os.rename(fout, fin)
+    logger.info('Finished')
+    return
+# END
+
+
 def main(cmd):
     parser = argparse.ArgumentParser("Collections of command-line functions to perform common pre-processing and analysis functions.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     subparsers = parser.add_subparsers()
@@ -2569,43 +2655,72 @@ def main(cmd):
     # <editor-fold desc="BAM Commands">
     parser_bamcov = subparsers.add_parser("bamcov", help="BAM: Get mean read-depth for chromosomes from a BAM file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_pbamrc = subparsers.add_parser("pbamrc", help="BAM: Run bam-readcount in a parallel manner by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_bamrc2af = subparsers.add_parser("bamrc2af", help="BAM: Reads the output of pbamrc and a corresponding VCF file and saves the allele frequencies of the ref/alt alleles.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_splitbam = subparsers.add_parser("splitbam", help="BAM: Split a BAM files based on TAG value. BAM file must be sorted using the TAG.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_mapbp = subparsers.add_parser("mapbp", help="BAM: For a given reference coordinate get the corresponding base and position in the reads/segments mapping the reference position", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_bam2coords = subparsers.add_parser("bam2coords", help="BAM: Convert BAM/SAM file to alignment coords", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_ppileup = subparsers.add_parser("ppileup", help="BAM: Currently it is slower than just running mpileup on 1 CPU. Might be possible to optimize later. Run samtools mpileup in parallel when pileup is required for specific positions by dividing the input bed file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # </editor-fold>
 
+    # <editor-fold desc="syri CLI">
+    parser_runsyri = subparsers.add_parser("runsyri", help=hyellow("syri: Parser to align and run syri on two genomes"),
+                                           formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_syriidx = subparsers.add_parser("syriidx", help=hyellow(
+        "syri: Generates index for syri.out. Filters non-SR annotations, then bgzip, then tabix index"),
+                                           formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_syri2bed = subparsers.add_parser("syri2bed", help=hyellow("syri: Converts syri output to bedpe format"),
+                                            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # </editor-fold>
 
-    ## syri
-    parser_runsyri = subparsers.add_parser("runsyri", help=hyellow("syri: Parser to align and run syri on two genomes"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_syriidx = subparsers.add_parser("syriidx", help=hyellow("syri: Generates index for syri.out. Filters non-SR annotations, then bgzip, then tabix index"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser_syri2bed = subparsers.add_parser("syri2bed", help=hyellow("syri: Converts syri output to bedpe format"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-    ## Plotting
+    # <editor-fold desc="Plotting">
     parser_plthist = subparsers.add_parser("plthist", help="Plot: Takes frequency output (like from uniq -c) and generates a histogram plot", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_plotal = subparsers.add_parser("plotal", help="Plot: Visualise pairwise-whole genome alignments between multiple genomes", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_plotbar = subparsers.add_parser("pltbar", help="Plot: Generate barplot. Input: a two column file with first column as features and second column as values", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # </editor-fold>
 
-    ## Assembly graphs
+    # <editor-fold desc='Assembly graphs'>
     parser_asmreads = subparsers.add_parser("asmreads", help=hyellow("GFA: For a given genomic region, get reads that constitute the corresponding assembly graph"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_gfatofa = subparsers.add_parser("gfatofa", help=hyellow("GFA: Convert a gfa file to a fasta file"), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # </editor-fold>
 
-    ## GFF
+    # <editor-fold desc='GFF'>
     parser_gfftrans = subparsers.add_parser("gfftrans", help="GFF: Get transcriptome (gene sequence) for all genes in a gff file. WARNING: THIS FUNCTION MIGHT HAVE BUGS.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_gffsort = subparsers.add_parser("gffsort", help="GFF: Sort a GFF file based on the gene start positions", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # </editor-fold>
 
-    ## VCF
+    # <editor-fold desc='VCF'>
     parser_vcfdp = subparsers.add_parser("vcfdp", help=hyellow("VCF: Get DP and DP4 values from a VCF file."), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # </editor-fold>
 
-    ## Tables
+    # <editor-fold desc='Tables'>
     parser_getcol = subparsers.add_parser("getcol", help="Table:Select columns from a TSV or CSV file using column names", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # TODO: Add functionality for sampling rows
     parser_samplerow = subparsers.add_parser("smprow", help="Table:Select random rows from a text file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_xls2tsv = subparsers.add_parser("xls2csv", help="Table:Convert excel tables to .tsv/.csv", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # </editor-fold>
+
+    # <editor-fold desc='Misc'>
+    parser_gz2bgz = subparsers.add_parser("gz2bgz",
+                                          help="Misc:converts a gz to bgzip",
+                                          formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    # </editor-fold>
 
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
+
+    # gz2bgz
+    parser_gz2bgz.set_defaults(func=gz2bgz)
+    parser_gz2bgz.add_argument('fin', help="Input gzip file", type=argparse.FileType('r'))
+    parser_gz2bgz.add_argument('--out', help='Output file name', type=argparse.FileType('w'))
+
+    # bamrc2af
+    parser_bamrc2af.set_defaults(func=bamrc2af)
+    parser_bamrc2af.add_argument("bamrc", help="BAM readcount file generated using bamrc", type=argparse.FileType('r'))
+    parser_bamrc2af.add_argument("vcf", help="VCF file", type=argparse.FileType('r'))
+    parser_bamrc2af.add_argument("out", help="Output file", type=argparse.FileType('w'))
+    parser_bamrc2af.add_argument("--min_rc", help="Minimum required read count. Position with lower number of reads would be filtered out", type=int, default=1)
 
     # xls2csv
     parser_xls2tsv.set_defaults(func=xls2csv)
@@ -2664,6 +2779,7 @@ def main(cmd):
     parser_runsyri.set_defaults(func=runsryi)
     parser_runsyri.add_argument("ref", help='Reference genome', type=argparse.FileType('r'))
     parser_runsyri.add_argument("qry", help='Query genome', type=argparse.FileType('r'))
+    parser_runsyri.add_argument("--rid", help='Reference index generated using minima2', type=argparse.FileType('r'))
     parser_runsyri.add_argument("-n", help='Number of cores to use', type=int, default=1)
     parser_runsyri.add_argument("-p", help='prefix', type=str, default='out')
     parser_runsyri.add_argument("-alignment", help='Output alignment type', choices=['sam', 'bam', 'paf'], default='paf', type=str)
@@ -2694,9 +2810,8 @@ def main(cmd):
     parser_plotal.add_argument("-D", help='DPI', type=int, default=300)
 
 
-
     # mapbp
-    parser_mapbp.set_defaults(func=mapbp)
+    parser_mapbp.set_defaults(func=mapbp_cli)
     parser_mapbp.add_argument("pos", help='Genome position in \'chr:start-end\' format.', type=str)
     parser_mapbp.add_argument("map", help='Alignment file in BAM/PAF format.', type=argparse.FileType('r'))
     parser_mapbp.add_argument("--anno", help='Syri annotation file. Only alignments present in the syri output would be selected. Need syri.out to be sorted and indexed with tabix. Use: hometools syridx.', type=argparse.FileType('r'))
@@ -2770,6 +2885,7 @@ def main(cmd):
     parser_pbamrc.add_argument("-n", help="Number of CPU cores to use", type=int, default=1)
     parser_pbamrc.add_argument("-S", help="Run jobs in sequentially (each line from bed starts a new job). By default, jobs are run in batches (by dividing the BED file)", action='store_true', default=False)
     parser_pbamrc.add_argument("o", help="Output file name", type=argparse.FileType('w'))
+    parser_pbamrc.add_argument("--bamrcpath", help="Location of bam-readcount executable", type=argparse.FileType('r'))
 
 
     parser_bamcov.set_defaults(func=bamcov)
@@ -2885,13 +3001,10 @@ def main(cmd):
 
     
     args = parser.parse_args()
-
+    # print(args)
     from itertools import cycle
     from sys import getsizeof, stderr
     from itertools import chain
     from collections import deque
-
-
-    # print(args)
     args.func(args)
 
