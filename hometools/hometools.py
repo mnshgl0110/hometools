@@ -2149,7 +2149,7 @@ def reg_str_to_list(regstr):
 # END
 
 
-def mapbp(args):
+def mapbp(sfin, mapfin, d, pos):
     """
     Outputs mapping positions for the given reference genome coordinate
     """
@@ -2162,13 +2162,9 @@ def mapbp(args):
         :param: pos = reference genome coordinate in (chrom, start, end) format 
         """
         return [b.split('\t') for b in sout.fetch(*pos)]
-    # END 
+    # END
 
-    sfin = args.anno.name if args.anno is not None else None           # input syri.out file
-    mapfin = args.map.name
-    d = args.d
-    pos = reg_str_to_list(args.pos)
-
+    outd = deque()
     # if syri output is provided, select alignments selected by syri
     if sfin is not None:
         #TODO: Validate that this works correctly when syri output file is also provided
@@ -2204,11 +2200,21 @@ def mapbp(args):
         out = f"{al.query_name}:{p}-{p}"
         if d:
             out = out + '\t+' if al.is_forward else out + '\t-'
-        print(out)
+        outd.append(out)
+    return outd
+# END
+
+
+def mapbp_cli(args):
+    sfin = args.anno.name if args.anno is not None else None           # input syri.out file
+    mapfin = args.map.name
+    d = args.d
+    pos = reg_str_to_list(args.pos)
+    outd = mapbp(sfin, mapfin, d, pos)
+    print('\n'.join(outd))
     logger.info('Finished')
     return
 # END
-
 
 def fachrid(args):
     fa = args.fa.name
@@ -2804,9 +2810,8 @@ def main(cmd):
     parser_plotal.add_argument("-D", help='DPI', type=int, default=300)
 
 
-
     # mapbp
-    parser_mapbp.set_defaults(func=mapbp)
+    parser_mapbp.set_defaults(func=mapbp_cli)
     parser_mapbp.add_argument("pos", help='Genome position in \'chr:start-end\' format.', type=str)
     parser_mapbp.add_argument("map", help='Alignment file in BAM/PAF format.', type=argparse.FileType('r'))
     parser_mapbp.add_argument("--anno", help='Syri annotation file. Only alignments present in the syri output would be selected. Need syri.out to be sorted and indexed with tabix. Use: hometools syridx.', type=argparse.FileType('r'))
