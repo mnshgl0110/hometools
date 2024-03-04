@@ -2165,6 +2165,7 @@ def mapbp(sfin, mapfin, d, pos):
     # END
 
     outd = deque()
+    pos = reg_str_to_list(posstr)
     # if syri output is provided, select alignments selected by syri
     if sfin is not None:
         #TODO: Validate that this works correctly when syri output file is also provided
@@ -2209,7 +2210,7 @@ def mapbp_cli(args):
     sfin = args.anno.name if args.anno is not None else None           # input syri.out file
     mapfin = args.map.name
     d = args.d
-    pos = reg_str_to_list(args.pos)
+    posstr = args.pos
     outd = mapbp(sfin, mapfin, d, pos)
     print('\n'.join(outd))
     logger.info('Finished')
