@@ -141,6 +141,7 @@ def writefasta(fa, f):
     # TODO: write bgzip file
     # from pysam import tabix_compress as gzopen
     from gzip import open as gzopen
+    logger = mylogger("writefasta")
     isgzip = f.rsplit('.', 1)[-1] == 'gz'
     # b, nl >> Begin character, new line
     op, openstr, b, nl = (gzopen, 'wb', b'>', b'\n') if isgzip else (open, 'w', '>', '\n')
@@ -246,7 +247,7 @@ def cggenlen(cg, gen, full=False):
 
 def cgwalk(cg, n, ngen='r'):
     """
-    Returns how many bases would be travelled in the non-focal genome after moving n bases in the focal (ngen) genome. 
+    Returns how many bases would be travelled in the non-focal genome after moving n bases in the focal (ngen) genome.
     """
     cnt = 0                   # Count in the focal genome
     ocnt = 0                  # Count in the other genome
@@ -1033,7 +1034,7 @@ def subnuc(args):
     for i in range(len(querySeq)):
         querySeq[i].seq = Seq(str(querySeq[i].seq).replace(args.q, args.t))
 #    print(querySeq)
-    
+
     if args.o == None:
         fout = fasta+"_edited"
     else:
@@ -1277,7 +1278,7 @@ def getscaf(args):
     fin = args.fasta.name
     n = args.n
     fout = args.o
-    prefix = args.p
+    prefix = args.p + '_' if args.p is not None else ''
     rev = 2 if args.r else 1
     logger.info('Reading input fasta')
     gen = readfasta(fin)
@@ -1295,23 +1296,23 @@ def getscaf(args):
         if coord[0] != cid:
             if cid in gen:
                 if np.random.randint(0, rev, 1):
-                    scafgenome[f'{prefix}_{cid}_{chromlen[cid]}_r'] = revcomp(gen[cid][pos:chromlen[cid]])
+                    scafgenome[f'{prefix}{cid}_{chromlen[cid]}_r'] = revcomp(gen[cid][pos:chromlen[cid]])
                 else:
-                    scafgenome[f'{prefix}_{cid}_{chromlen[cid]}'] = gen[cid][pos:chromlen[cid]]
+                    scafgenome[f'{prefix}{cid}_{chromlen[cid]}'] = gen[cid][pos:chromlen[cid]]
             cid = coord[0]
             pos = 0
         if np.random.randint(0, rev, 1):
-            scafgenome[f'{prefix}_{cid}_{coord[1]}_r'] = revcomp(gen[cid][pos:coord[1]])
+            scafgenome[f'{prefix}{cid}_{coord[1]}_r'] = revcomp(gen[cid][pos:coord[1]])
         else:
-            scafgenome[f'{prefix}_{cid}_{coord[1]}'] = gen[cid][pos:coord[1]]
+            scafgenome[f'{prefix}{cid}_{coord[1]}'] = gen[cid][pos:coord[1]]
         pos = coord[1]
     if np.random.randint(0, rev, 1):
-        scafgenome[f'{prefix}_{cid}_{chromlen[cid]}_r'] = revcomp(gen[cid][pos:chromlen[cid]])
+        scafgenome[f'{prefix}{cid}_{chromlen[cid]}_r'] = revcomp(gen[cid][pos:chromlen[cid]])
     else:
-        scafgenome[f'{prefix}_{cid}_{chromlen[cid]}'] = gen[cid][pos:chromlen[cid]]
+        scafgenome[f'{prefix}{cid}_{chromlen[cid]}'] = gen[cid][pos:chromlen[cid]]
     for key in gen.keys():
         if key not in chrid:
-            scafgenome[f'{prefix}_{key}'] = gen[key]
+            scafgenome[f'{prefix}{key}'] = gen[key]
     logger.info(f'Writing scaffolds to {fout}')
     writefasta(scafgenome, fout)
     logger.info(f'Finished')
@@ -1509,7 +1510,7 @@ def vcfdp(args):
                 fout.write('\t'.join([line[0], line[1], line[3], line[4], DP] + DP4) + '\n')
 # END
 
-                        
+
 def gffsort(args):
     logger.info('Required format of GFF file:\n')
     logger.info('Chr\tMethod\tType\tStart\tEnd\tScore\tStrand\tPhase\tAttribute(ID=uniq_id;other_info)\n')
@@ -1544,7 +1545,7 @@ def gffsort(args):
                     else:
                         seq = seq + '\t'.join(line) + '\n'
             gffdata[chr][id] = seq
-        
+
         for chr in sorted(list(geneids.keys())):
             for gid in sorted(geneids[chr].keys(), key=lambda x: geneids[chr][x]):
                 fout.write(gffdata[chr][gid])
@@ -2127,10 +2128,10 @@ def reg_str_to_list(regstr):
     """
     Converts region string ("contig:start-end") to region tuple. Follow same
     standard as pysam: https://pysam.readthedocs.io/en/latest/glossary.html#term-region
-    
+
     Here, regions in string format are 1-based closed regions, whereas regions in
     tuple format would be 0-based half open.
-    
+
     Example: Chr1:15001-20000 would become (Chr1, 15000, 20000).
     Explanation:
         * 15001 becomes 15000 because 1-based get converted to 0-based.
@@ -2145,7 +2146,7 @@ def reg_str_to_list(regstr):
         raise ValueError('start and end should be more than 0')
     if s > e:
         raise ValueError('start cannot be more than end')
-    return [c, s-1, e]    
+    return [c, s-1, e]
 # END
 
 
@@ -2159,7 +2160,7 @@ def mapbp(sfin, mapfin, d, posstr):
     def getsyripos(sout, pos):
         """
         :param: sout = syri output file (sorted and tabix indexed) handler (type: pysam.libctabix.TabixFile)
-        :param: pos = reference genome coordinate in (chrom, start, end) format 
+        :param: pos = reference genome coordinate in (chrom, start, end) format
         """
         return [b.split('\t') for b in sout.fetch(*pos)]
     # END
@@ -2210,7 +2211,7 @@ def mapbp_cli(args):
     sfin = args.anno.name if args.anno is not None else None           # input syri.out file
     mapfin = args.map.name
     d = args.d
-    posstr = args.pos
+    pos = args.pos
     outd = mapbp(sfin, mapfin, d, pos)
     print('\n'.join(outd))
     logger.info('Finished')
@@ -2233,7 +2234,7 @@ def fachrid(args):
         if c in iddict:
             outfasta[iddict[c]] = fasta[c]
     writefasta(outfasta, out)
-# END 
+# END
 
 
 def runsryi(args):
@@ -2915,7 +2916,7 @@ def main(cmd):
     parser_vcfdp.set_defaults(func=vcfdp)
     parser_vcfdp.add_argument("vcf", help="VCF file", type=argparse.FileType('r'))
     parser_vcfdp.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default='vcfdp.txt')
-    
+
 
     parser_gfftrans.set_defaults(func=gfftrans)
     parser_gfftrans.add_argument("gff", help="Gff file", type=argparse.FileType('r'))
@@ -2966,7 +2967,7 @@ def main(cmd):
     parser_getchr.add_argument("--chrs", help="list of chomosome IDs to select", nargs='*')
     parser_getchr.add_argument("-v", help="Remove chromosomes provided", default=False, action='store_true')
     parser_getchr.add_argument("-o", help="Output file name", type=argparse.FileType('w'), default=None)
-    
+
     parser_exseq.set_defaults(func=extractseq)
     parser_exseq.add_argument("fasta", help="fasta file", type=argparse.FileType('r'))
     parser_exseq.add_argument("-c", "--chr", help="Chromosome ID", type=str)
@@ -2981,7 +2982,7 @@ def main(cmd):
     parser_getscaf.add_argument("n", help="number of scaffolds required", type=int)
     parser_getscaf.add_argument("-r", help="reverse complement some scaffolds", default=False, action="store_true")
     parser_getscaf.add_argument("-o", help="output file name", default="scaf.fasta")
-    parser_getscaf.add_argument("-p", help="Chromosome ID prefix", type=str, default='')
+    parser_getscaf.add_argument("-p", help="Chromosome ID prefix", type=str)
 
     parser_seqsize.set_defaults(func=seqsize)
     parser_seqsize.add_argument("fasta", help="genome fasta file", type=argparse.FileType('r'))
@@ -2990,17 +2991,17 @@ def main(cmd):
     parser_filsize.set_defaults(func=filsize)
     parser_filsize.add_argument("fasta", help="genome fasta file", type=argparse.FileType('r'))
     parser_filsize.add_argument("size", help="molecule cut-off in bp, all smaller molecules will be filtered out", type=int, default=0)
-    
+
     parser_subnuc.set_defaults(func=subnuc)
     parser_subnuc.add_argument("fasta", help="genome fasta file", type=argparse.FileType('r'))
     parser_subnuc.add_argument("q", help="character to change", default="", type=str)
     parser_subnuc.add_argument("t", help="character to change to", default="", type=str)
     parser_subnuc.add_argument("-o", help="output file name", type=argparse.FileType('w'))
-    
+
     parser_basrat.set_defaults(func=basrat)
     parser_basrat.add_argument("fasta", help="genome fasta file", type=argparse.FileType('r'))
 
-    
+
     args = parser.parse_args()
     # print(args)
     from itertools import cycle
