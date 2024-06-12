@@ -2183,6 +2183,7 @@ def mapbp(sfin, mapfin, d, posstr):
         for p in poso:
             if 'AL' in p[6]:
                 qryreg[p[3]].append([int(p[4]), int(p[5])])
+    # TODO: Consider adding reader for PAF alignments as well.
     logger.info(f"Reading BAM file: {mapfin}")
     bam = pysam.AlignmentFile(mapfin)
     for al in bam.fetch(*pos):
@@ -2815,7 +2816,8 @@ def main(cmd):
     # mapbp
     parser_mapbp.set_defaults(func=mapbp_cli)
     parser_mapbp.add_argument("pos", help='Genome position in \'chr:start-end\' format.', type=str)
-    parser_mapbp.add_argument("map", help='Alignment file in BAM/PAF format.', type=argparse.FileType('r'))
+    # parser_mapbp.add_argument("map", help='Alignment file in BAM/PAF format.', type=argparse.FileType('r'))
+    parser_mapbp.add_argument("map", help='Alignment file in BAM format.', type=argparse.FileType('r'))
     parser_mapbp.add_argument("--anno", help='Syri annotation file. Only alignments present in the syri output would be selected. Need syri.out to be sorted and indexed with tabix. Use: hometools syridx.', type=argparse.FileType('r'))
     parser_mapbp.add_argument("-d", help='Output alignment strand (sense(+)/antisense(-))', default=False, action='store_true')
 
