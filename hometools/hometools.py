@@ -2178,8 +2178,9 @@ def mapbp(sfin, mapfin, d, posstr):
         possyri[2] += 1                 # Edit end coordinate to make it suitable for working with syri.out file. Need to be done because syri.out is not in BED format as expected by pysam
         poso = getsyripos(sout, possyri)    # Positions overlapping
         if len(poso) == 1:
-            if poso[0][7] == 'NOTAL':
-                return 'NOTAL'
+            if poso[0][6] == 'NOTAL':
+                logger.info('No alignment found')
+                return
         for p in poso:
             if 'AL' in p[6]:
                 qryreg[p[3]].append([int(p[4]), int(p[5])])
