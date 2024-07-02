@@ -2393,6 +2393,7 @@ def syriidx(args):
     annos = set(annos)
     logger.info("reading annotations")
     df = readsyriout(fin, annos)
+    df[1] -= 1          # Change coordinate to BED format
     outfin = f'{fin}.bed'
     df.to_csv(outfin, index=False, header=False, sep='\t')
     logger.info("Compressing annotations")
