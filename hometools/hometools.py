@@ -2135,7 +2135,7 @@ def reg_str_to_list(regstr):
     Example: Chr1:15001-20000 would become (Chr1, 15000, 20000).
     Explanation:
         * 15001 becomes 15000 because 1-based get converted to 0-based.
-        * 20000 would become 19999 for 0-based and since it is open at the end, next position (i.e. would be used in the region)
+        * 20000 would become 19999 for 0-based and since it is open at the end, next position (i.e. 20000) would be used in the region
     """
     try:
         c, p = regstr.split(':')
@@ -2164,12 +2164,10 @@ def mapbp(sfin, mapfin, d, posstr):
         """
         return [b.split('\t') for b in sout.fetch(*pos)]
     # END
-
     outd = deque()
     pos = reg_str_to_list(posstr)
     # if syri output is provided, select alignments selected by syri
     if sfin is not None:
-        #TODO: Validate that this works correctly when syri output file is also provided
         logger.info(f'Syri output is provided. reading file: {sfin}')
         qryreg = defaultdict(deque)
         sout = pysam.TabixFile(sfin)
@@ -2206,6 +2204,7 @@ def mapbp(sfin, mapfin, d, posstr):
             out = out + '\t+' if al.is_forward else out + '\t-'
         outd.append(out)
     return outd
+
 # END
 
 
@@ -2215,7 +2214,8 @@ def mapbp_cli(args):
     d = args.d
     pos = args.pos
     outd = mapbp(sfin, mapfin, d, pos)
-    print('\n'.join(outd))
+    if outd is not None:
+        print('\n'.join(outd))
     logger.info('Finished')
     return
 # END
@@ -2373,6 +2373,9 @@ def bam2coords(args):
 
 
 def syriidx(args):
+    """
+    Currently, outputs reference coordinates in the BED format and the query coordinate in the REGION format.
+    """
     # syriidx
     from subprocess import Popen, PIPE
     logger = mylogger("syriidx")
