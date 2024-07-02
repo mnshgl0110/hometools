@@ -2166,6 +2166,8 @@ def mapbp(sfin, mapfin, d, posstr):
     # END
     outd = deque()
     pos = reg_str_to_list(posstr)
+    pos = pos[:2] + [pos[1] + 1]
+    logger.info(f"Getting mapping coordinate for position {pos[0]}:{pos[1]+1}")
     # if syri output is provided, select alignments selected by syri
     if sfin is not None:
         logger.info(f'Syri output is provided. reading file: {sfin}')
@@ -2183,6 +2185,7 @@ def mapbp(sfin, mapfin, d, posstr):
             if 'AL' in p[6]:
                 qryreg[p[3]].append([int(p[4]), int(p[5])])
     # TODO: Consider adding reader for PAF alignments as well.
+    # print(qryreg)
     logger.info(f"Reading BAM file: {mapfin}")
     bam = pysam.AlignmentFile(mapfin)
     for al in bam.fetch(*pos):
@@ -2194,7 +2197,7 @@ def mapbp(sfin, mapfin, d, posstr):
                 continue
             if [qs, qe] not in qryreg[al.query_name]:
                 continue
-        n = pos[2] - al.reference_start
+        n = pos[1] + 1 - al.reference_start
         p = qs + cgwalk(cgtpl(al.cigarstring, to_int=True), n) - 1
         if not al.is_forward:
             qlen = cggenlen(al.cigarstring, 'q', full=True)
