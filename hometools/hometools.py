@@ -2173,10 +2173,8 @@ def mapbp(sfin, mapfin, d, posstr):
         logger.info(f'Syri output is provided. reading file: {sfin}')
         qryreg = defaultdict(deque)
         sout = pysam.TabixFile(sfin)
-        possyri = pos.copy()
-        possyri[1] += 1
-        possyri[2] += 1                 # Edit end coordinate to make it suitable for working with syri.out file. Need to be done because syri.out is not in BED format as expected by pysam
-        poso = getsyripos(sout, possyri)    # Positions overlapping
+        # possyri = pos.copy()
+        poso = getsyripos(sout, pos)    # Positions overlapping
         if len(poso) == 1:
             if poso[0][6] == 'NOTAL':
                 logger.info('No alignment found')
