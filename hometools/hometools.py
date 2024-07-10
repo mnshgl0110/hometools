@@ -235,10 +235,13 @@ def cggenlen(cg, gen, full=False):
     except AssertionError:
         raise ValueError('gen need to "r" or "q" for reference or query')
     if gen == 'r':
+        # operations that consume the feference
         s = {'M', 'D', 'N', '=', 'X'}
     elif full:
+        # get the full length of the alignment, including clipped bases
         s = {'M', 'I', 'S', '=', 'X', 'H'}
     else:
+        # only for operations that consume the query
         s = {'M', 'I', 'S', '=', 'X'}
     l = sum([int(i[0]) for i in cg if i[1] in s])
     return l
@@ -248,21 +251,29 @@ def cggenlen(cg, gen, full=False):
 def cgwalk(cg, n, ngen='r'):
     """
     Returns how many bases would be travelled in the non-focal genome after moving n bases in the focal (ngen) genome.
+    See https://samtools.github.io/hts-specs/SAMv1.pdf for an overview of the operations that consume the query or the reference.
     """
     cnt = 0                   # Count in the focal genome
     ocnt = 0                  # Count in the other genome
+    # define cigar operations that consume the query
     nset = {'M', 'D', 'N', '=', 'X'} if ngen == 'r' else {'M', 'I', '=', 'X'}
     oset = {'M', 'I', '=', 'X'} if ngen == 'r' else {'M', 'D', 'N', '=', 'X'}
     for c in cg:
+        # skip clipped or padded alignments, as they do not consume the query
         if c[1] in {'H', 'P', 'S'}: continue
+        # consume reference if M, D, N, =, or X
         if c[1] in nset:
+            # check if n + number of bases in the operation is smaller or equal to number of bases of query consumed. If yes, return the number of bases consumed in the query
             if n <= cnt + c[0]:
                 if c[1] in {'M', '=', 'X'}:
                     return ocnt + (n - cnt)
+                # do not add more bases if I, D, S, or N    
                 elif c[1] in {'I', 'D', 'S', 'N'}:
                     return ocnt
+            # consume reference if M, D, N, =, X
             else:
                 cnt += c[0]
+        # consume query if M, I, =, or X
         if c[1] in oset:
             ocnt += c[0]
     raise ValueError("n is larger than the number of bases covered by cigartuple")
@@ -2149,10 +2160,74 @@ def reg_str_to_list(regstr):
     return [c, s-1, e]
 # END
 
+def get_pos_BAM_file(poslist, bam_file, query_reg=None, d=False):
+    """
+    Outputs mapping positions in the query genome for the given reference genome coordinate
+
+    :param: poslist = List containing reference position. E.g. Chr1:1 corresponds to ["Chr1", 1, 1]
+    :param: bam_file = BAM file containing alignments of query genome to reference genome
+    :param: query_reg = Dictionary with chromosome names as keys and regions ([start, end]) as values
+    :param: d = If True, strand of mapping positions will be reported
+    
+    :return: Deque object containing lists of position strings of coordinates on query genome (e.g. "Chr1:1-1") and an id string for the aligned segment
+    """
+    import hashlib
+    import pysam
+    from collections import defaultdict, deque
+
+    outd = deque()
+    logger.info(f"Reading BAM file: {bam_file}")
+    # open BAM file
+    bam = pysam.AlignmentFile(bam_file)
+    # get all alignment records in the provided region
+    for al in bam.fetch(*poslist):
+        # get cigar tuples. The alignment is returned as a list of tuples of (operation, length). 
+        # E.g. the tuple [ (0,3), (1,5), (0,2) ] refers to an alignment with 3 matches, 5 insertions and another 2 matches. 
+        # See https://pysam.readthedocs.io/en/latest/api.html#api for what each operation means. 
+        dircg = al.cigartuples #if al.is_forward else al.cigartuples[::-1]
+        # query_alignment_start is the index of the first base in query_sequence that is not soft-clipped.
+        qs = al.query_alignment_start + 1
+        # check cigar string and add hard-clipped bases
+        cigar_tuple = cgtpl(al.cigarstring, to_int=True)
+        if cigar_tuple[0][1] == "H":
+            qs += cigar_tuple[0][0]
+        qe = qs + al.query_length - 1
+        # check if query is part of Syri file
+        if query_reg is not None:
+            # check if chromosome name is part of Syri file
+            if al.query_name not in query_reg:
+                continue
+            # check if [query_start, query_end] is in Syri alignment
+            if [qs, qe] not in query_reg[al.query_name]:
+                continue
+        # store the start position of the given region + 1 minus the 0-based leftmost reference coordinate of the alignment (al.reference_start)
+        n = poslist[2]  - al.reference_start
+        # compute p, the number of bases moved in the query genome if we move n number of bases in the reference genome
+        # cgtpl changes the cigarstring (e.g. "30M1D30M") into a cigar tuple (e.g. [[30, "M"], [1, "D"], [30, "M "])
+        # cgwalk uses CIGAR string to determine how many bases get consumed in the query if we consume n number of bases in the reference, -1 because the reference coordinate used to calculate n was 0-based
+        p = qs + cgwalk(cigar_tuple, n) - 1
+        # go back if alignment is on reverse strand
+        if not al.is_forward:
+            # get length of full alignment
+            qlen = cggenlen(al.cigarstring, 'q', full=True)
+            # not p - qlen + 1, because qlen is supposed to be a full chromosome. + 1 because we start counting from the back
+            p = qlen - p + 1
+        # get unique id for alignment by concatenating query_name, ref_start, CIGAR string, and orientation
+        id_string = hashlib.md5(f"{al.query_name}{al.reference_start}{al.cigarstring}{al.is_forward}".encode('utf-8')).hexdigest()
+        out = [al.query_name, p]
+        if d:
+            out = out + '\t+' if al.is_forward else out + '\t-'
+        outd.append([out, id_string])
+    return outd
 
 def mapbp(sfin, mapfin, d, posstr):
     """
     Outputs mapping positions for the given reference genome coordinate
+
+    :param: sfin = syri output file, sorted and tabix indexed
+    :param: mapfin = BAM file containing alignments of query genome to reference genome
+    :param d = Boolean indicating if alignment strand info should be provided
+    :param posstr = String containing position, in the form "Chr1:1-100000"
     """
     import pysam
     from collections import defaultdict, deque
@@ -2164,48 +2239,47 @@ def mapbp(sfin, mapfin, d, posstr):
         """
         return [b.split('\t') for b in sout.fetch(*pos)]
     # END
+
+    # initialize deque (more efficient than list object) for storing output mapping positions
     outd = deque()
+
+    # change position string to position list. E,g, "Chr1:1-100000" to ["Chr1", 0, 100000]
     pos = reg_str_to_list(posstr)
-    pos = pos[:2] + [pos[1] + 1]
-    logger.info(f"Getting mapping coordinate for position {pos[0]}:{pos[1]+1}")
-    # if syri output is provided, select alignments selected by syri
+    #pos = pos[:2] + [pos[1] + 1]
+    logger.info(f"Getting mapping coordinate for position {pos[0]}:{pos[1]}-{pos[2]}")
+    # if syri output is provided, select alignments present in this file
     if sfin is not None:
         logger.info(f'Syri output is provided. reading file: {sfin}')
+        # initialize defaultdict of deques to store query regions
         qryreg = defaultdict(deque)
+        # open Syri output file as Tabixfile (tabular file indexed with tabix)
         sout = pysam.TabixFile(sfin)
         # possyri = pos.copy()
+        # get list of all rows in SYRI output file overlapping with region
         poso = getsyripos(sout, pos)    # Positions overlapping
+        # return NOTAL if regions was not aligned
         if len(poso) == 1:
             if poso[0][6] == 'NOTAL':
                 logger.info('No alignment found')
                 return
+        # add chromosome name as key with a tuple of start and end position as value 
         for p in poso:
             if 'AL' in p[6]:
                 qryreg[p[3]].append([int(p[4]), int(p[5])])
     # TODO: Consider adding reader for PAF alignments as well.
     # print(qryreg)
-    logger.info(f"Reading BAM file: {mapfin}")
-    bam = pysam.AlignmentFile(mapfin)
-    for al in bam.fetch(*pos):
-        dircg = al.cigartuples #if al.is_forward else al.cigartuples[::-1]
-        qs = al.qstart + (dircg[0][1] if dircg[0][0] == 5 else 0) + 1
-        qe = qs + al.qlen - 1
-        if sfin is not None:
-            if al.query_name not in qryreg:
-                continue
-            if [qs, qe] not in qryreg[al.query_name]:
-                continue
-        n = pos[1] + 1 - al.reference_start
-        p = qs + cgwalk(cgtpl(al.cigarstring, to_int=True), n) - 1
-        if not al.is_forward:
-            qlen = cggenlen(al.cigarstring, 'q', full=True)
-            p = qlen - p + 1
-        out = f"{al.query_name}:{p}-{p}"
-        if d:
-            out = out + '\t+' if al.is_forward else out + '\t-'
-        outd.append(out)
+    else:
+        qryreg = None
+    # get positions in query for given reference start and end position
+    outd_start = get_pos_BAM_file([pos[0], pos[1], pos[1] + 1], mapfin, qryreg, d)
+    outd_end = get_pos_BAM_file([pos[0], pos[2] - 1, pos[2]], mapfin, qryreg, d)
+    # compare the start and end positions and group those that share the same ID
+    for start_pos, start_align_id in outd_start:
+        for end_pos, end_align_id in outd_end:
+            if start_align_id == end_align_id:
+                outd.append(f"{start_pos[0]}:{start_pos[1]}-{end_pos[1]}")
+                break
     return outd
-
 # END
 
 
