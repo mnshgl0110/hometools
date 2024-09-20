@@ -2150,7 +2150,7 @@ def reg_str_to_list(regstr):
 # END
 
 
-def mapbp(sfin, mapfin, d, posstr):
+def mapbp(sfin, mapfin, d, posstr, **kwargs):
     """
     Outputs mapping positions for the given reference genome coordinate
     """
@@ -2164,6 +2164,9 @@ def mapbp(sfin, mapfin, d, posstr):
         """
         return [b.split('\t') for b in sout.fetch(*pos)]
     # END
+    QUERY_REG = None
+    if 'QUERY_REG' in kwargs:
+        QUERY_REG = kwargs['QUERY_REG']
     outd = deque()
     pos = reg_str_to_list(posstr)
     pos = pos[:2] + [pos[1] + 1]
@@ -2181,7 +2184,11 @@ def mapbp(sfin, mapfin, d, posstr):
                 return
         for p in poso:
             if 'AL' in p[6]:
-                qryreg[p[3]].append([int(p[4]), int(p[5])])
+                if QUERY_REG is not None:
+                    if (int(p[4]) == QUERY_REG[0]) and (int(p[5]) == QUERY_REG[1]):
+                        qryreg[p[3]].append([int(p[4]), int(p[5])])
+                else:
+                    qryreg[p[3]].append([int(p[4]), int(p[5])])
     # TODO: Consider adding reader for PAF alignments as well.
     # print(qryreg)
     logger.info(f"Reading BAM file: {mapfin}")
