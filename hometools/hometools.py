@@ -2637,6 +2637,14 @@ def gz2bgz(args):
 # END
 
 
+def topmsa(args):
+    from hometools.topological_msa import topological_sort
+    logger = mylogger('topmsa')
+    topological_sort(args)
+    logger.info('Finished')
+# END
+
+
 def main(cmd):
     parser = argparse.ArgumentParser("Collections of command-line functions to perform common pre-processing and analysis functions.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     subparsers = parser.add_subparsers()
@@ -2712,12 +2720,20 @@ def main(cmd):
     parser_gz2bgz = subparsers.add_parser("gz2bgz",
                                           help="Misc:converts a gz to bgzip",
                                           formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_topmsa = subparsers.add_parser("topmsa",
+                                          help="Misc:Create topological MSA for non-duplicated nodes (genomic regions).",
+                                          formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # </editor-fold>
 
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         sys.exit()
+
+    # topmsa
+    parser_topmsa.set_defaults(func=topmsa)
+    parser_topmsa.add_argument('input', help="Input file containing sequences to align. One sequence per line. Sequence values are separated by commas", type=argparse.FileType('r'))
+    parser_topmsa.add_argument('output', help="Output file containing MSA.", type=argparse.FileType('w'))
 
     # gz2bgz
     parser_gz2bgz.set_defaults(func=gz2bgz)
