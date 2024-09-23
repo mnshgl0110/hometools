@@ -223,7 +223,7 @@ def cgstr(cg):
 
 def cggenlen(cg, gen, full=False):
     """
-    Takes cigar as input, and return the number of bases covered by it the reference
+    Takes cigar as input, and return the number of bases covered by it in the reference
     or query genome.
     Cigar strings are first converted to cigar tuples.
     Use full=True to get the query length of the entire sequence and not just the aligned region
@@ -2152,7 +2152,7 @@ def reg_str_to_list(regstr):
 
 def mapbp(sfin, mapfin, d, posstr, **kwargs):
     """
-    Outputs mapping positions for the given reference genome coordinate
+    Outputs mapping positions for the given reference genome coordinate.
     """
     import pysam
     from collections import defaultdict, deque
@@ -2194,19 +2194,21 @@ def mapbp(sfin, mapfin, d, posstr, **kwargs):
     logger.info(f"Reading BAM file: {mapfin}")
     bam = pysam.AlignmentFile(mapfin)
     for al in bam.fetch(*pos):
-        dircg = al.cigartuples #if al.is_forward else al.cigartuples[::-1]
+        dircg = al.cigartuples if al.is_forward else al.cigartuples[::-1]
         qs = al.qstart + (dircg[0][1] if dircg[0][0] == 5 else 0) + 1
         qe = qs + al.qlen - 1
+        qs, qe = (qs, qe) if al.is_forward else (qe, qs)
         if sfin is not None:
             if al.query_name not in qryreg:
                 continue
             if [qs, qe] not in qryreg[al.query_name]:
                 continue
         n = pos[1] + 1 - al.reference_start
-        p = qs + cgwalk(cgtpl(al.cigarstring, to_int=True), n) - 1
-        if not al.is_forward:
-            qlen = cggenlen(al.cigarstring, 'q', full=True)
-            p = qlen - p + 1
+        p = cgwalk(cgtpl(al.cigarstring, to_int=True), n) - 1
+        p = qs + p if al.is_forward else qs - p
+        # if not al.is_forward:
+        #     qlen = cggenlen(al.cigarstring, 'q', full=True)
+        #     p = qlen - p + 1
         out = f"{al.query_name}:{p}-{p}"
         if d:
             out = out + '\t+' if al.is_forward else out + '\t-'
